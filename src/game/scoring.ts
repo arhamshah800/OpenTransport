@@ -1,0 +1,8 @@
+import type { SimulationSnapshot } from '../time';
+import type { TransitNetwork } from '../transit';
+import type { ScoreSnapshot } from './types';
+
+/** Transparent prototype weights; all components are 0-100 and score is not cumulative. */
+export const scoreWeights = { ridership: 0.25, coverage: 0.2, reliability: 0.2, financialHealth: 0.2, connectivity: 0.15 } as const;
+const cap = (value: number): number => Math.max(0, Math.min(100, Math.round(value)));
+export const calculateScore = (snapshot: SimulationSnapshot, network: TransitNetwork): ScoreSnapshot => { const operations = snapshot.operations?.statistics; const boardings = operations?.boardings ?? 0; const requests = snapshot.population.activeRequests + snapshot.population.atDestination + snapshot.population.requestingRoute; const lines = network.definition.lines.filter((line) => line.active).length; const ridership = cap(Math.log10(boardings + 1) * 25); const coverage = cap(requests === 0 ? 0 : (operations?.boardings ?? 0) / requests * 100); const reliability = cap(100 - (operations?.deniedBoardings ?? 0) * 2 - Math.max(0, (operations?.maximumWaitSeconds ?? 0) - 600) / 15); const cashPenalty = Math.max(0, -snapshot.finances.cashCents) / 1_000_000; const deficit = Math.max(0, -snapshot.finances.allTime.netOperatingCents) / 1_000_000; const financialHealth = cap(100 - cashPenalty - deficit - snapshot.finances.debtCents / 10_000_000); const connectivity = cap(lines * 12 + network.definition.transferComplexes.length * 10); const components = { ridership, coverage, reliability, financialHealth, connectivity }; return { components, total: Math.round(Object.entries(scoreWeights).reduce((total, [key, weight]) => total + components[key as keyof typeof components] * weight, 0)) }; };
