@@ -19,7 +19,7 @@ npm run build
 - `src/levels` - static city packages and the manifest that registers them.
 - `src/map`, `src/population`, `src/transit`, `src/construction`, `src/modes`, `src/operations`, `src/economy`, `src/time`, `src/game`, `src/components`, `src/shared`, and `src/workers` - reserved module boundaries for later work.
 
-The ten intended game modules are World, Map, Population, Transit, Construction, Modes, Operations, Economy, Time, and Game. World, Map, and Population are prototyped; the remaining modules are intentionally deferred. City data is static while gameplay runs: there are no live geographic API calls. `World`, Map-domain logic, and simulation logic are plain TypeScript, so later worker code does not depend on React.
+The ten intended game modules are World, Map, Population, Transit, Construction, Modes, Operations, Economy, Time, and Game. World, Map, Population, and Transit topology are prototyped; the remaining modules are intentionally deferred. City data is static while gameplay runs: there are no live geographic API calls. `World`, Map-domain logic, simulation logic, and transit topology are plain TypeScript, so later worker code does not depend on React.
 
 ## Levels
 
@@ -28,3 +28,5 @@ The ten intended game modules are World, Map, Population, Transit, Construction,
 After loading a level, the Map Engine renders local geometry with interactive roads/buildings/workplaces/POIs, population modes, developer toggles, camera reset, and selection inspector. See [the Map Engine documentation](docs/MAP_ENGINE.md) for coordinate conventions and the future overlay API.
 
 The development-only Population Debug panel deterministically generates representative residents from the static city, advances supplied simulation time, and inspects unresolved work/activity/return demand. It has no routing or transit behavior; see [the Population Simulation documentation](docs/POPULATION_SIMULATION.md).
+
+The Transit Network Debug panel owns a separate player network: it can place BUS/TRAM/SUBWAY stops, create topology-only lines and transfers, and render them above the map. Its saved model contains no map or UI objects; see [the Transit Network documentation](docs/TRANSIT_NETWORK.md).

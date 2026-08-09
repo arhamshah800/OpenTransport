@@ -15,16 +15,19 @@ export class MapLibreController implements MapController {
   private readonly world: World;
   private visibility = baseVisibility;
   private highlightedBuilding: string | null = null;
+  private transitOverlay: TransitOverlay = { lines: [], stops: [] };
+  private readonly handleContainerClick = (event: MouseEvent): void => { const bounds = this.options.container.getBoundingClientRect(); this.options.onCoordinate(this.coordinateFromScreen(event.clientX - bounds.left, event.clientY - bounds.top)); };
   public constructor(private readonly options: MapLibreControllerOptions) {
     this.world = options.world;
     this.map = new maplibregl.Map({ container: options.container, style: { version: 8, sources: {}, layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#edf1ec' } }] }, center: [0, 0], zoom: 10, attributionControl: false });
     this.map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+    options.container.addEventListener('click', this.handleContainerClick);
     this.map.on('load', () => this.initialize());
   }
   private initialize(): void {
     for (const [name, data] of Object.entries(createBaseSources(this.world))) this.map.addSource(sourceId(name), { type: 'geojson', data, promoteId: 'id' });
-    this.map.addSource(sourceId('transit'), { type: 'geojson', data: createTransitSource({ lines: [], stops: [] }) });
-    this.map.addSource(sourceId('transit-stops'), { type: 'geojson', data: createTransitStopsSource({ lines: [], stops: [] }) });
+    this.map.addSource(sourceId('transit'), { type: 'geojson', data: createTransitSource(this.transitOverlay) });
+    this.map.addSource(sourceId('transit-stops'), { type: 'geojson', data: createTransitStopsSource(this.transitOverlay) });
     this.map.addLayer({ id: layerId('water'), type: 'line', source: sourceId('water'), paint: { 'line-color': '#4d97bd', 'line-width': 11, 'line-opacity': 0.72 } });
     this.map.addLayer({ id: layerId('buildings'), type: 'fill', source: sourceId('buildings'), paint: { 'fill-color': ['case', ['boolean', ['feature-state', 'selected'], false], '#f2b663', '#d4d6cf'], 'fill-opacity': .84 } });
     this.map.addLayer({ id: layerId('building-outline'), type: 'line', source: sourceId('buildings'), paint: { 'line-color': '#aeb5ac', 'line-width': 1 } });
@@ -52,7 +55,8 @@ export class MapLibreController implements MapController {
   public setPopulationMode(mode: PopulationDisplayMode): void { this.visibility = { ...this.visibility, population: mode }; this.applyVisibility(); }
   public setLayerVisibility(layer: keyof Omit<MapLayerVisibility, 'population'>, visible: boolean): void { this.visibility = { ...this.visibility, [layer]: visible }; this.applyVisibility(); }
   private applyVisibility(): void { if (!this.map.isStyleLoaded()) return; const visible = (id: string, value: boolean): void => { this.map.setLayoutProperty(layerId(id), 'visibility', value ? 'visible' : 'none'); }; visible('population-points', this.visibility.population === 'points'); visible('population-density', this.visibility.population === 'density'); visible('workplaces', this.visibility.workplaces); visible('pois', this.visibility.pois); visible('water', this.visibility.water); visible('road-ids', this.visibility.roadIds); visible('building-ids', this.visibility.buildingIds); visible('bounds', this.visibility.bounds); }
-  public setTransitOverlay(overlay: TransitOverlay): void { const lines = this.map.getSource(sourceId('transit')); if (lines instanceof maplibregl.GeoJSONSource) lines.setData(createTransitSource(overlay)); const stops = this.map.getSource(sourceId('transit-stops')); if (stops instanceof maplibregl.GeoJSONSource) stops.setData(createTransitStopsSource(overlay)); }
+  public setTransitOverlay(overlay: TransitOverlay): void { this.transitOverlay = overlay; const lines = this.map.getSource(sourceId('transit')); if (lines instanceof maplibregl.GeoJSONSource) lines.setData(createTransitSource(overlay)); const stops = this.map.getSource(sourceId('transit-stops')); if (stops instanceof maplibregl.GeoJSONSource) stops.setData(createTransitStopsSource(overlay)); }
+  public coordinateFromScreen(x: number, y: number): { readonly latitude: number; readonly longitude: number } { const coordinate = this.map.unproject([x, y]); return { latitude: coordinate.lat, longitude: coordinate.lng }; }
   public resetCamera(): void { const { southWest, northEast } = this.world.definition.bounds; this.map.fitBounds([[southWest.longitude, southWest.latitude], [northEast.longitude, northEast.latitude]], { padding: 56, duration: 450 }); }
-  public destroy(): void { this.map.remove(); }
+  public destroy(): void { this.options.container.removeEventListener('click', this.handleContainerClick); this.map.remove(); }
 }
