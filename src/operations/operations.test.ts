@@ -47,6 +47,24 @@ describe('Vehicles & Operations', () => {
     expect(operations.snapshot().statistics.alightings).toBeGreaterThanOrEqual(70);
   });
 
+  it('turns back and boards reverse riders on bidirectional lines', () => {
+    const operations = new OperationsSimulation(network(), [config()]);
+    expect(operations.enqueuePassenger('outbound', 'a', 'b')).toBe(true);
+    expect(operations.enqueuePassenger('inbound', 'b', 'a')).toBe(true);
+    operations.advance(1);
+    expect(operations.snapshot().statistics.boardings).toBe(1);
+    let sawInbound = false;
+    for (let step = 0; step < 20 * 60; step += 1) {
+      operations.advance(1);
+      if (operations.snapshot().vehicles[0]?.direction === -1) sawInbound = true;
+      if (operations.snapshot().statistics.alightings >= 2) break;
+    }
+    expect(sawInbound).toBe(true);
+    expect(operations.snapshot().statistics.boardings).toBeGreaterThanOrEqual(2);
+    expect(operations.snapshot().statistics.alightings).toBeGreaterThanOrEqual(2);
+    expect(operations.snapshot().statistics.byLine.bus?.totalWaitSeconds).toBeGreaterThanOrEqual(0);
+  });
+
   it('activates and deactivates service without deleting the line', () => {
     const graph = network();
     const operations = new OperationsSimulation(graph, [config(1, true)]);

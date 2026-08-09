@@ -1,7 +1,8 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { levelRegistry } from '../levels/manifest';
 import type { World } from '../world';
 import { LocalProfileRepository, LocalStorageSaveRepository, type GameSave, type PlayerProfile } from '../game';
+import { GameErrorBoundary } from './GameErrorBoundary';
 
 const MapView = lazy(() => import('../map/MapView').then((module) => ({ default: module.MapView })));
 
@@ -9,26 +10,74 @@ const saves = new LocalStorageSaveRepository();
 const profiles = new LocalProfileRepository();
 const defaultPlayer = (): PlayerProfile => ({ id: 'local-player', displayName: 'Planner', achievementIds: [], settings: { autosave: true } });
 
+const setsEqual = (a: ReadonlySet<string>, b: ReadonlySet<string>): boolean => {
+  if (a.size !== b.size) return false;
+  for (const value of a) if (!b.has(value)) return false;
+  return true;
+};
+
+/** Cheap pre-check so Continue never mounts MapView on a save that will throw in GameSession. */
+export const validateSaveForLoad = (save: GameSave, levelId: string, levelVersion: number): void => {
+  if (save.saveVersion !== 1 || save.gameSchemaVersion !== 1) throw new Error('Unsupported save schema version.');
+  if (save.levelId !== levelId || save.levelVersion !== levelVersion) {
+    throw new Error('That save belongs to a different city version and cannot be continued here.');
+  }
+  if (!Number.isInteger(save.seed)) throw new Error('Save seed is invalid. Start a new game for this city.');
+  if (!save.transitNetwork || !Array.isArray(save.transitNetwork.lines) || !Array.isArray(save.transitNetwork.stops)) {
+    throw new Error('Save transit network is malformed. Start a new game for this city.');
+  }
+};
+
 export function App() {
   const [world, setWorld] = useState<World | null>(null);
   const [save, setSave] = useState<GameSave | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [player, setPlayer] = useState<PlayerProfile>(defaultPlayer);
   const [continueIds, setContinueIds] = useState<ReadonlySet<string>>(new Set());
-  const levels = levelRegistry.listLevels();
+  const levels = useMemo(() => levelRegistry.listLevels(), []);
+  const commitCount = useRef(0);
+  const commitWindowStart = useRef(typeof performance !== 'undefined' ? performance.now() : 0);
+  const loopWarned = useRef(false);
 
   useEffect(() => {
+    if (import.meta.env.DEV) {
+      commitCount.current += 1;
+      const now = performance.now();
+      if (now - commitWindowStart.current >= 1000) {
+        if (commitCount.current > 30 && !loopWarned.current) {
+          loopWarned.current = true;
+          console.warn('OpenTransport: App exceeded 30 commits/sec — check unstable effect dependencies.');
+        }
+        commitCount.current = 0;
+        commitWindowStart.current = now;
+      }
+    }
+  });
+
+  useEffect(() => {
+    let cancelled = false;
     void (async () => {
       const profile = await profiles.load();
-      if (profile) setPlayer(profile);
-      else await profiles.save(defaultPlayer());
+      if (cancelled) return;
+      if (profile) {
+        setPlayer((current) => (current.id === profile.id && current.displayName === profile.displayName ? current : profile));
+      } else {
+        await profiles.save(defaultPlayer());
+      }
       const available = new Set<string>();
       for (const level of levels) {
         if (await saves.hasSave(level.id)) available.add(level.id);
       }
-      setContinueIds(available);
+      if (cancelled) return;
+      setContinueIds((current) => (setsEqual(current, available) ? current : available));
     })();
+    return () => { cancelled = true; };
   }, [levels]);
+
+  const exitToLevels = (): void => {
+    setWorld(null);
+    setSave(undefined);
+  };
 
   const load = async (id: string, mode: 'new' | 'continue'): Promise<void> => {
     try {
@@ -37,15 +86,15 @@ export function App() {
       if (mode === 'continue') {
         const existing = await saves.load(id);
         if (!existing) throw new Error('No compatible save was found for this city.');
-        if (existing.levelId !== nextWorld.definition.metadata.id || existing.levelVersion !== nextWorld.definition.metadata.version) {
-          throw new Error('That save belongs to a different city version and cannot be continued here.');
-        }
+        validateSaveForLoad(existing, nextWorld.definition.metadata.id, nextWorld.definition.metadata.version);
         setSave(existing);
       } else {
         setSave(undefined);
       }
       setWorld(nextWorld);
     } catch (reason) {
+      setWorld(null);
+      setSave(undefined);
       setError(reason instanceof Error ? reason.message : 'Unable to load level');
     }
   };
@@ -58,14 +107,25 @@ export function App() {
 
   if (world) {
     return (
-      <Suspense fallback={<main className="app-shell"><p className="intro">Loading city map…</p></main>}>
-        <MapView
-          world={world}
-          player={player}
-          initialSave={save}
-          onBack={() => { setWorld(null); setSave(undefined); void saves.hasSave(world.definition.metadata.id).then((has) => setContinueIds((current) => { const next = new Set(current); if (has) next.add(world.definition.metadata.id); else next.delete(world.definition.metadata.id); return next; })); }}
-        />
-      </Suspense>
+      <GameErrorBoundary fallbackTitle="Unable to open this city" onReset={exitToLevels}>
+        <Suspense fallback={<main className="app-shell"><p className="intro">Loading city map…</p></main>}>
+          <MapView
+            world={world}
+            player={player}
+            initialSave={save}
+            onBack={() => {
+              const levelId = world.definition.metadata.id;
+              exitToLevels();
+              void saves.hasSave(levelId).then((has) => setContinueIds((current) => {
+                const next = new Set(current);
+                if (has) next.add(levelId);
+                else next.delete(levelId);
+                return setsEqual(current, next) ? current : next;
+              }));
+            }}
+          />
+        </Suspense>
+      </GameErrorBoundary>
     );
   }
 

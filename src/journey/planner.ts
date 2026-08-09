@@ -39,20 +39,22 @@ const segmentRideSeconds = (network: TransitNetwork, lineId: string, fromStopId:
   if (!line) return null;
   const fromIndex = line.stopIds.indexOf(fromStopId);
   const toIndex = line.stopIds.indexOf(toStopId);
-  if (fromIndex < 0 || toIndex <= fromIndex) return null;
+  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return null;
+  const lo = Math.min(fromIndex, toIndex);
+  const hi = Math.max(fromIndex, toIndex);
   const mode = modeRegistry.getModeDefinition(line.mode);
   const speed = mode.operations.defaultCruisingSpeedKph * 1000 / 3600;
   let meters = 0;
-  for (let index = fromIndex; index < toIndex; index += 1) {
+  for (let index = lo; index < hi; index += 1) {
     const segment = line.segments[index];
     if (!segment) return null;
     meters += segment.geometry.slice(1).reduce((total, point, pointIndex) => total + distanceMeters(segment.geometry[pointIndex], point), 0);
   }
-  const dwell = (toIndex - fromIndex) * mode.operations.defaultDwellSeconds;
+  const dwell = (hi - lo) * mode.operations.defaultDwellSeconds;
   return (speed <= 0 ? Number.POSITIVE_INFINITY : meters / speed) + dwell;
 };
 
-/** Build direct ride connections on active lines (forward order only; mirrors Operations dispatch). */
+/** Build direct ride connections on active lines (forward, plus reverse for bidirectional). */
 const buildRideConnections = (
   network: TransitNetwork,
   services: readonly LineServiceConfiguration[],
@@ -66,6 +68,20 @@ const buildRideConnections = (
     const waitSeconds = Math.max(30, (headwayMinutesFor(config, hourOfDay) * 60) / 2);
     for (let from = 0; from < line.stopIds.length - 1; from += 1) {
       for (let to = from + 1; to < line.stopIds.length; to += 1) {
+        const rideSeconds = segmentRideSeconds(network, line.id, line.stopIds[from], line.stopIds[to]);
+        if (rideSeconds == null || !Number.isFinite(rideSeconds)) continue;
+        connections.push({
+          fromStopId: line.stopIds[from],
+          toStopId: line.stopIds[to],
+          lineId: line.id,
+          rideSeconds,
+          waitSeconds,
+        });
+      }
+    }
+    if (line.direction !== 'bidirectional') continue;
+    for (let from = line.stopIds.length - 1; from > 0; from -= 1) {
+      for (let to = from - 1; to >= 0; to -= 1) {
         const rideSeconds = segmentRideSeconds(network, line.id, line.stopIds[from], line.stopIds[to]);
         if (rideSeconds == null || !Number.isFinite(rideSeconds)) continue;
         connections.push({

@@ -25,6 +25,8 @@ export function DataPanel({
   operations,
   setPopulation,
   setToggle,
+  emptyDemandHint = false,
+  onReplan,
 }: {
   readonly visibility: MapLayerVisibility;
   readonly developerMode: boolean;
@@ -32,6 +34,8 @@ export function DataPanel({
   readonly operations?: SimulationSnapshot['operations'];
   readonly setPopulation: (mode: MapLayerVisibility['population']) => void;
   readonly setToggle: (key: keyof Omit<MapLayerVisibility, 'population'>, value: boolean) => void;
+  readonly emptyDemandHint?: boolean;
+  readonly onReplan?: () => void;
 }) {
   const boardings = operations?.statistics.boardings ?? 0;
   const unserved = population.unservedTrips;
@@ -49,6 +53,7 @@ export function DataPanel({
         <div><span>Boardings</span><strong>{boardings}</strong></div>
       </div>
       <p className="context-intro">Approx. served share of resolved demand: <strong>{coverage}%</strong>. Avg wait {operations?.statistics.boardings ? Math.round(operations.statistics.totalWaitSeconds / operations.statistics.boardings) : 0}s.</p>
+      {emptyDemandHint && <p className="debug-note" role="status">No active requests yet — resume simulation or wait for morning demand.</p>}
       <fieldset>
         <legend>Population</legend>
         <div className="segmented-control">{(['hidden', 'points', 'density'] as const).map((mode) => <label className={visibility.population === mode ? 'active' : ''} key={mode}><input type="radio" name="population" checked={visibility.population === mode} onChange={() => setPopulation(mode)} /><span>{mode === 'hidden' ? 'Off' : `${mode[0].toUpperCase()}${mode.slice(1)}`}</span></label>)}</div>
@@ -67,6 +72,7 @@ export function DataPanel({
           <legend>Developer overlays</legend>
           {(['roadIds', 'buildingIds', 'bounds'] as const).map((key) => <label key={key}><input type="checkbox" checked={visibility[key]} onChange={(event) => setToggle(key, event.target.checked)} /><span>{({ roadIds: 'Road IDs', buildingIds: 'Building IDs', bounds: 'Level bounds' } as const)[key]}</span></label>)}
           <p className="debug-note">Raw counts — requesting {population.requestingRoute}, at home {population.atHome}, at destination {population.atDestination}.</p>
+          {onReplan && <button type="button" className="secondary" onClick={onReplan}>Replan pending demand</button>}
         </fieldset>
       )}
     </section>
@@ -77,36 +83,48 @@ export function SettingsPanel({ developerMode, onDeveloperModeChange }: { readon
   return <section className="settings-panel"><p className="eyebrow">SETTINGS</p><h2>Game interface</h2><label className="settings-switch"><span><strong>Developer Mode</strong><small>Reveal diagnostics, manual time controls, raw IDs, and topology tools.</small></span><input type="checkbox" role="switch" checked={developerMode} onChange={(event) => onDeveloperModeChange(event.target.checked)} /></label><p className="settings-status">Developer Mode is <strong>{developerMode ? 'on' : 'off'}</strong>.</p><div className="shortcut-list"><p className="eyebrow">KEYBOARD SHORTCUTS</p><dl><dt>Escape</dt><dd>Cancel proposal, or return to Select</dd><dt>1</dt><dd>Bus</dd><dt>2</dt><dd>Tram</dd><dt>3</dt><dd>Subway</dd></dl></div></section>;
 }
 
-export function InspectorPanel({ world, selection, coordinate, network, transit, simulation, stopStats }: { readonly world: World; readonly selection: MapSelection; readonly coordinate: { readonly latitude: number; readonly longitude: number } | null; readonly network: TransitNetwork; readonly transit: TransitOverlay; readonly simulation: SimulationSnapshot; readonly stopStats?: import('../operations').StopPassengerStats }) {
+export function InspectorPanel({ world, selection, coordinate, network, transit, simulation, stopStats, developerMode = false, onOpenLine }: { readonly world: World; readonly selection: MapSelection; readonly coordinate: { readonly latitude: number; readonly longitude: number } | null; readonly network: TransitNetwork; readonly transit: TransitOverlay; readonly simulation: SimulationSnapshot; readonly stopStats?: import('../operations').StopPassengerStats; readonly developerMode?: boolean; readonly onOpenLine?: (lineId: string) => void }) {
   let heading = world.definition.metadata.name; let content: ReactNode = <><p className="context-intro">Use Select to inspect the city. Current network information is shown below.</p><div className="overview-metrics"><div><span>Population represented</span><strong>{world.definition.metadata.approximatePopulation?.toLocaleString() ?? '—'}</strong></div><div><span>Active lines</span><strong>{network.definition.lines.filter((line) => line.active).length}</strong></div><div><span>Stops</span><strong>{network.definition.stops.length}</strong></div><div><span>Active trip requests</span><strong>{simulation.population.activeRequests}</strong></div></div></>;
   if (selection?.kind === 'road') { const item = world.roadsById.get(selection.id); heading = item?.name ?? 'Unnamed road'; content = item && <dl><dt>Road name</dt><dd>{item.name ?? 'Unnamed'}</dd><dt>Road class</dt><dd>{item.classification}</dd><dt>Assumed speed</dt><dd>{item.speedKph ? `${item.speedKph} km/h` : 'Not specified'}</dd></dl>; }
-  if (selection?.kind === 'building') { const item = world.buildingsById.get(selection.id); heading = item?.displayName ?? 'Building'; content = item && <dl><dt>Category</dt><dd>{item.category ?? 'Not specified'}</dd><dt>Residential population</dt><dd>{buildingPopulation(world, item.id).toLocaleString()}</dd><dt>Jobs</dt><dd>{buildingEmployment(world, item.id).toLocaleString()}</dd><dt>Acquisition / demolition cost</dt><dd>{currency.format(item.acquisitionValue)}</dd><dt>Building ID</dt><dd>{item.id}</dd></dl>; }
+  if (selection?.kind === 'building') { const item = world.buildingsById.get(selection.id); heading = item?.displayName ?? 'Building'; content = item && <dl><dt>Category</dt><dd>{item.category ?? 'Not specified'}</dd><dt>Residential population</dt><dd>{buildingPopulation(world, item.id).toLocaleString()}</dd><dt>Jobs</dt><dd>{buildingEmployment(world, item.id).toLocaleString()}</dd><dt>Acquisition / demolition cost</dt><dd>{currency.format(item.acquisitionValue)}</dd>{developerMode && <><dt>Building ID</dt><dd>{item.id}</dd></>}</dl>; }
   if (selection?.kind === 'workplace') { const item = world.workplacesById.get(selection.id); heading = item?.displayName ?? 'Workplace'; content = item && <dl><dt>Jobs</dt><dd>{item.jobs.toLocaleString()}</dd><dt>Building</dt><dd>{item.buildingId ?? 'None'}</dd></dl>; }
   if (selection?.kind === 'poi') { const item = world.pointsOfInterestById.get(selection.id); heading = item?.displayName ?? 'Landmark'; content = item ? <dl><dt>Category</dt><dd>{item.category}</dd><dt>Attraction weight</dt><dd>{item.attractionWeight ?? 'Not specified'}</dd><dt>Building</dt><dd>{item.buildingId ?? 'None'}</dd></dl> : <p>City landmark: {selection.id}</p>; }
   if (selection?.kind === 'station') {
     const item = network.getStop(selection.id);
     heading = item?.name ?? 'Station';
     const lineNames = (stopStats?.lineIds ?? []).map((id) => network.getLine(id)?.name ?? id).join(', ') || 'None';
-    content = item && <dl>
-      <dt>Type</dt><dd>{item.kind}</dd>
-      <dt>Modes</dt><dd>{item.supportedModes.join(', ')}</dd>
-      <dt>Lines serving</dt><dd>{lineNames}</dd>
-      <dt>Passengers waiting</dt><dd>{stopStats?.waitingCount ?? 0}</dd>
-      <dt>Average wait</dt><dd>{stopStats ? `${Math.round(stopStats.averageWaitSeconds)}s` : '—'}</dd>
-      <dt>Recent boardings</dt><dd>{stopStats?.recentBoardings ?? 0}</dd>
-      <dt>Capacity pressure</dt><dd>{stopStats?.capacityPressure ? 'Yes — vehicles leaving riders behind' : 'No'}</dd>
-      <dt>Station ID</dt><dd>{item.id}</dd>
-    </dl>;
+    content = item && <>
+      <dl>
+        <dt>Type</dt><dd>{item.kind}</dd>
+        <dt>Modes</dt><dd>{item.supportedModes.join(', ')}</dd>
+        <dt>Lines serving</dt><dd>{lineNames}</dd>
+        <dt>Passengers waiting</dt><dd>{stopStats?.waitingCount ?? 0}</dd>
+        <dt>Average wait</dt><dd>{stopStats ? `${Math.round(stopStats.averageWaitSeconds)}s` : '—'}</dd>
+        <dt>Recent boardings</dt><dd>{stopStats?.recentBoardings ?? 0}</dd>
+        <dt>Capacity pressure</dt><dd>{stopStats?.capacityPressure ? 'Yes — vehicles leaving riders behind' : 'No'}</dd>
+        {developerMode && <><dt>Station ID</dt><dd>{item.id}</dd></>}
+      </dl>
+      {(stopStats?.lineIds ?? []).slice(0, 1).map((lineId) => onOpenLine ? <button key={lineId} type="button" className="secondary" onClick={() => onOpenLine(lineId)}>Open line editor</button> : null)}
+    </>;
   }
-  if (selection?.kind === 'line') { const item = network.definition.lines.find((line) => line.id === selection.id || line.segments.some((segment) => segment.id === selection.id)); heading = item?.name ?? 'Transit line'; content = item && <dl><dt>Mode</dt><dd>{modeRegistry.getModeDefinition(item.mode).name}</dd><dt>Stops</dt><dd>{item.stopIds.length}</dd><dt>Status</dt><dd>{item.active ? 'Active' : 'Inactive'}</dd></dl>; }
+  if (selection?.kind === 'line') {
+    const item = network.definition.lines.find((line) => line.id === selection.id || line.segments.some((segment) => segment.id === selection.id));
+    heading = item?.name ?? 'Transit line';
+    content = item && <>
+      <dl><dt>Mode</dt><dd>{modeRegistry.getModeDefinition(item.mode).name}</dd><dt>Stops</dt><dd>{item.stopIds.length}</dd><dt>Status</dt><dd>{item.active ? 'Active' : 'Inactive'}</dd></dl>
+      {onOpenLine && <button type="button" onClick={() => onOpenLine(item.id)}>Open line editor</button>}
+    </>;
+  }
   if (selection?.kind === 'vehicle') {
     const overlay = transit.vehicles?.find((vehicle) => vehicle.id === selection.id);
     const runtime = simulation.operations?.vehicles.find((vehicle) => vehicle.id === selection.id);
     const line = runtime ? network.getLine(runtime.lineId) : undefined;
     const template = runtime ? modeRegistry.getVehicleDefinition(runtime.vehicleTypeId) : undefined;
     const stopIds = line?.stopIds ?? [];
+    const direction = runtime?.direction ?? 1;
     const currentStop = runtime && stopIds[runtime.stopIndex] ? network.getStop(stopIds[runtime.stopIndex]) : undefined;
-    const nextStop = runtime && stopIds[runtime.stopIndex + 1] ? network.getStop(stopIds[runtime.stopIndex + 1]) : undefined;
+    const nextIndex = runtime ? runtime.stopIndex + direction : -1;
+    const nextStop = nextIndex >= 0 && nextIndex < stopIds.length ? network.getStop(stopIds[nextIndex]) : undefined;
     heading = template?.name ?? 'Transit vehicle';
     content = <dl>
       <dt>Line</dt><dd>{line?.name ?? runtime?.lineId ?? 'Unknown'}</dd>
@@ -114,9 +132,10 @@ export function InspectorPanel({ world, selection, coordinate, network, transit,
       <dt>Occupancy</dt><dd>{runtime ? `${runtime.passengers.length} / ${template?.capacity ?? '—'}` : 'Unavailable'}</dd>
       <dt>Current stop</dt><dd>{currentStop?.name ?? (runtime?.state === 'TRAVELING' ? 'En route' : '—')}</dd>
       <dt>Next stop</dt><dd>{nextStop?.name ?? 'End of line'}</dd>
-      <dt>Direction</dt><dd>{line?.direction === 'one-way' ? 'Outbound (one-way)' : 'Outbound (no reverse yet)'}</dd>
+      <dt>Direction</dt><dd>{direction === -1 ? 'Inbound' : line?.direction === 'one-way' ? 'Outbound (one-way)' : 'Outbound'}</dd>
       <dt>Operational state</dt><dd>{runtime?.state ?? 'Unknown'}</dd>
-      <dt>Vehicle ID</dt><dd>{selection.id}</dd>
+      {developerMode && <><dt>Vehicle ID</dt><dd>{selection.id}</dd></>}
+      {line && onOpenLine && <dd><button type="button" className="secondary" onClick={() => onOpenLine(line.id)}>Open operations</button></dd>}
     </dl>;
   }
   return <section className="inspection"><p className="eyebrow">INSPECTOR</p><h2>{heading}</h2>{content}{coordinate && <p className="coordinate">Map coordinate: {coordinate.latitude.toFixed(5)}, {coordinate.longitude.toFixed(5)}</p>}</section>;

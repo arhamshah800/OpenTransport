@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { World } from '../world';
 import {
-  createTransferComplex, deleteLine, removeStopFromLine, renameLine, setLineActive, setLineAlignment,
+  createTransferComplex, deleteLine, removeStopFromLine, renameLine, setLineAlignment,
   TransitNetwork,
 } from './index';
 import type { TransitMode } from './types';
@@ -65,11 +65,6 @@ export function LineEditor({ world, network, lineId, mode, construction, onNetwo
     } catch (error) { onMessage(error instanceof Error ? error.message : 'Unable to remove stop.'); }
   };
 
-  const toggleActive = (): void => {
-    onNetwork(setLineActive(network, line.id, !line.active));
-    onMessage(line.active ? 'Line deactivated.' : 'Line activated.');
-  };
-
   const removeLine = (): void => {
     onNetwork(deleteLine(network, line.id));
     onMessage('Line deleted. Stops and constructed infrastructure remain.');
@@ -94,12 +89,13 @@ export function LineEditor({ world, network, lineId, mode, construction, onNetwo
       <button type="button" className="secondary" onClick={onClose}>Back</button>
     </header>
     <label>Name <input aria-label="Rename line" value={name} onChange={(event) => setName(event.target.value)} /></label>
-    <div className="proposal-actions"><button type="button" onClick={saveName}>Save name</button><button type="button" className="secondary" onClick={toggleActive}>{line.active ? 'Deactivate' : 'Activate'}</button></div>
+    <div className="proposal-actions"><button type="button" onClick={saveName}>Save name</button></div>
+    <p className="debug-note">Use Start/Stop Service in Operations below to run the line. Topology stays available for editing.</p>
     <h3>Stops in order</h3>
     <ol className="stop-order-list">{stops.map((stop) => stop && <li key={stop.id}><span>{stop.name}</span><button type="button" className="secondary" onClick={() => removeStop(stop.id)}>Remove</button></li>)}</ol>
     <h3>Transfers</h3>
     <ul className="network-list">{stops.map((stop) => stop && <li key={`transfer-${stop.id}`}><button type="button" className="secondary" onClick={() => linkTransfer(stop.id)}>{transferStopId === stop.id ? 'Linking… ' : ''}{stop.name}</button></li>)}</ul>
-    <LineOperationsPanel network={network} lineId={line.id} engine={engine} snapshot={snapshot} onSnapshot={onSnapshot} />
+    <LineOperationsPanel network={network} lineId={line.id} engine={engine} snapshot={snapshot} onSnapshot={onSnapshot} onNetwork={onNetwork} />
     <div className="proposal-actions">
       <button type="button" className="danger" onClick={removeLine}>Delete line</button>
     </div>

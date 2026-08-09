@@ -70,14 +70,16 @@ export class SimulationEngine {
     }
     if (!this.operations) {
       this.operations = new OperationsSimulation(network, defaultServices(network));
-      return;
+    } else {
+      this.operations.replaceNetwork(network, defaultServices(network, this.operations.listConfigurations()));
     }
-    this.operations.replaceNetwork(network, defaultServices(network, this.operations.listConfigurations()));
+    this.replanPendingDemand();
   }
 
   public configureLineService(configuration: LineServiceConfiguration): void {
     if (!this.operations) this.operations = new OperationsSimulation(this.network, []);
     this.operations.configureLine(configuration);
+    this.replanPendingDemand();
   }
 
   public getLineService(lineId: string): LineServiceConfiguration | undefined { return this.operations?.getConfiguration(lineId); }
@@ -155,31 +157,47 @@ export class SimulationEngine {
   private processTravelDemand(hourOfDay: number): void {
     const requests = this.population.getTravelRequests();
     if (this.demandCursor > requests.length) this.demandCursor = 0;
-    if (this.demandCursor >= requests.length) return;
     const services = this.operations?.listConfigurations() ?? [];
-    const hasActiveService = Boolean(this.operations && this.network.definition.lines.some((line) => line.active));
-    for (; this.demandCursor < requests.length; this.demandCursor += 1) {
-      const request = requests[this.demandCursor];
+    const hasActiveService = Boolean(this.operations && this.network.definition.lines.some((line) => line.active && (this.operations?.getConfiguration(line.id)?.active ?? true)));
+    const dayIndex = Math.floor(this.timestampSeconds / 86_400);
+    const secondsIntoDay = this.timestampSeconds % 86_400;
+    // Soft deadline near end of day — keep pending until then so late-built networks can still serve demand.
+    const pastDeadline = secondsIntoDay >= 22 * 3600;
+
+    for (let index = 0; index < requests.length; index += 1) {
+      const request = requests[index];
       if (request.status !== 'unresolved') continue;
       if (!hasActiveService || !this.operations) {
-        this.population.markRequestUnserved(request.id);
-        this.operations?.recordUnservedDemand();
+        if (pastDeadline) {
+          this.population.markRequestUnserved(request.id);
+          this.operations?.recordUnservedDemand();
+        }
         continue;
       }
       const plan = planJourney(request.origin, request.destination, this.network, services, { hourOfDay });
       if (plan.status === 'unserved') {
-        this.population.markRequestUnserved(request.id);
-        this.operations.recordUnservedDemand();
+        if (pastDeadline) {
+          this.population.markRequestUnserved(request.id);
+          this.operations.recordUnservedDemand();
+        }
         continue;
       }
       const delaySeconds = journeyWalkSeconds(plan.accessWalkMeters);
       const enqueued = this.operations.enqueueJourney(request.id, plan.legs, { delaySeconds });
       if (!enqueued) {
-        this.population.markRequestUnserved(request.id);
+        if (pastDeadline) this.population.markRequestUnserved(request.id);
         continue;
       }
       this.population.assignTransitJourney(request.id);
     }
+    this.demandCursor = requests.length;
+    void dayIndex;
+  }
+
+  /** Re-attempt planning for unresolved demand after network or service changes. */
+  public replanPendingDemand(): void {
+    this.demandCursor = 0;
+    this.processTravelDemand(calendarAt(this.timestampSeconds).hour);
   }
 
   public snapshot(): SimulationSnapshot {

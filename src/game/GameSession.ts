@@ -84,6 +84,14 @@ export class GameSession {
   public getConstruction(): ConstructionState { return this.construction; }
   public setConstruction(state: ConstructionState): void { this.construction = state; }
 
+  public setSpeed(speed: import('../time').SimulationSpeed): void {
+    this.simulation.setSpeed(speed);
+  }
+
+  public snapshot(): import('../time').SimulationSnapshot {
+    return this.simulation.snapshot();
+  }
+
   public advanceBy(seconds: number): void {
     this.simulation.advanceBy(seconds);
     this.checkDemandAchievements();
@@ -91,6 +99,15 @@ export class GameSession {
 
   public advanceRealTime(seconds: number): void {
     this.simulation.advanceRealTime(seconds);
+    this.checkDemandAchievements();
+  }
+
+  /** Record side-effects from player ConstructionWorkflow commits (achievements stay session-owned). */
+  public noteConstructionCommit(estimate: { readonly riverCrossingIds: readonly string[] }): void {
+    if (estimate.riverCrossingIds.length) this.unlock('river-crossing');
+  }
+
+  public checkAchievementsFromSnapshot(): void {
     this.checkDemandAchievements();
   }
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { standardLoanProducts } from './config';
 import type { Economy } from './Economy';
 
@@ -19,14 +19,21 @@ export function FinancePanel({
   onChange,
   developerMode = false,
   onTakeLoan,
+  lineNames = {},
+  initialSection,
 }: {
   readonly economy: Economy;
   readonly timestampSeconds: number;
   readonly onChange: () => void;
   readonly developerMode?: boolean;
   readonly onTakeLoan?: (productId: string) => void;
+  readonly lineNames?: Readonly<Record<string, string>>;
+  readonly initialSection?: FinanceSection;
 }) {
-  const [section, setSection] = useState<FinanceSection>('overview');
+  const [section, setSection] = useState<FinanceSection>(initialSection ?? 'overview');
+  useEffect(() => {
+    if (initialSection) setSection(initialSection);
+  }, [initialSection]);
   const [pendingLoan, setPendingLoan] = useState<string | null>(null);
   const summary = economy.getFinancialSummary(timestampSeconds);
   const borrow = (id: string): void => {
@@ -39,6 +46,7 @@ export function FinancePanel({
     economy.record({ timestampSeconds, amountCents: 1_000_000_00, category: 'ADJUSTMENT', description: 'Developer cash adjustment' });
     onChange();
   };
+  const constructionEntries = economy.getLedger().filter((entry) => entry.category === 'CONSTRUCTION' || entry.category === 'DEMOLITION' || entry.description.toLowerCase().includes('construction') || entry.description.toLowerCase().includes('demolition') || entry.description.toLowerCase().includes('acquisition'));
 
   return (
     <section className="finance-panel">
@@ -76,7 +84,7 @@ export function FinancePanel({
         <div className="finance-operations">
           {summary.lines.length === 0 ? <p className="empty-state">No line operating results yet. Start service and carry passengers to see fares and costs by line.</p> : summary.lines.map((line) => (
             <article key={line.lineId}>
-              <h3>{line.lineId}</h3>
+              <h3>{lineNames[line.lineId] ?? line.lineId}</h3>
               <p>{line.boardings} boardings · Fares {money(line.fareRevenueCents)} · Costs {money(line.operatingCostCents)} · Net {money(line.netOperatingCents)}</p>
             </article>
           ))}
@@ -84,11 +92,24 @@ export function FinancePanel({
       )}
 
       {section === 'construction' && (
-        <dl className="finance-overview">
-          <dt>Construction spending (all time)</dt><dd>{money(summary.allTime.constructionSpendingCents)}</dd>
-          <dt>Demolition / acquisition (all time)</dt><dd>{money(summary.allTime.demolitionSpendingCents)}</dd>
-          <dt>Cash available</dt><dd>{money(summary.cashCents)}</dd>
-        </dl>
+        <div className="finance-operations">
+          <dl className="finance-overview">
+            <dt>Construction spending (all time)</dt><dd>{money(summary.allTime.constructionSpendingCents)}</dd>
+            <dt>Demolition / acquisition (all time)</dt><dd>{money(summary.allTime.demolitionSpendingCents)}</dd>
+            <dt>Cash available</dt><dd>{money(summary.cashCents)}</dd>
+          </dl>
+          <h3>Recent construction ledger</h3>
+          {constructionEntries.length === 0 ? <p className="empty-state">No construction spending recorded yet. Live proposal breakdowns appear on the Build card.</p> : (
+            <ul className="finance-ledger">
+              {constructionEntries.slice(-12).reverse().map((entry) => (
+                <li key={entry.id}>
+                  <span><small>{timeLabel(entry.timestampSeconds)}</small>{entry.description}</span>
+                  <strong className="expense">−{money(Math.abs(entry.amountCents))}</strong>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
 
       {section === 'loans' && (

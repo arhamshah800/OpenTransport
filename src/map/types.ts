@@ -48,7 +48,10 @@ export interface MapController {
   setLayerVisibility(layer: keyof Omit<MapLayerVisibility, 'population'>, visible: boolean): void;
   setTransitOverlay(overlay: TransitOverlay): void;
   setDemandOverlay(overlay: DemandOverlay): void;
+  setConstructionOverlay?(overlay: import('../construction').ConstructionWorkflowSnapshot): void;
   coordinateFromScreen(x: number, y: number): Coordinate;
   resetCamera(): void;
+  setPitchAndBearing(pitch: number, bearing: number): void;
+  zoomBy(amount: number): void;
   destroy(): void;
 }

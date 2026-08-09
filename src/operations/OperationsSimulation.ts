@@ -6,6 +6,7 @@ import type { TransitLine } from '../transit';
 import { estimateSupportedHeadwayMinutes } from './fleetPlanning';
 import type { LineServiceConfiguration, OperationsEvent, OperationsSnapshot, OperationsStatistics, StopPassengerStats, VehicleRuntime, WaitingPassenger } from './types';
 
+const emptyLineStats = (): { boardings: number; alightings: number; totalWaitSeconds: number } => ({ boardings: 0, alightings: 0, totalWaitSeconds: 0 });
 const emptyStats = (): OperationsStatistics => ({ boardings: 0, alightings: 0, deniedBoardings: 0, unservedDemand: 0, totalWaitSeconds: 0, maximumWaitSeconds: 0, operatingVehicleSeconds: 0, completedTrips: 0, byLine: {} });
 const lineLength = (line: TransitLine): number => line.segments.reduce((total, segment) => total + segment.geometry.slice(1).reduce((sum, point, index) => sum + distanceMeters(segment.geometry[index], point), 0), 0);
 
@@ -61,7 +62,14 @@ export class OperationsSimulation {
   public listConfigurations(): readonly LineServiceConfiguration[] { return [...this.configurations.values()]; }
 
   public enqueuePassenger(id: string, originStopId: string, destinationStopId: string): boolean {
-    const direct = this.network.definition.lines.find((line) => line.active && line.stopIds.indexOf(originStopId) >= 0 && line.stopIds.indexOf(destinationStopId) > line.stopIds.indexOf(originStopId));
+    const direct = this.network.definition.lines.find((line) => {
+      if (!line.active) return false;
+      const from = line.stopIds.indexOf(originStopId);
+      const to = line.stopIds.indexOf(destinationStopId);
+      if (from < 0 || to < 0 || from === to) return false;
+      if (line.direction === 'bidirectional') return true;
+      return to > from;
+    });
     if (!direct) { this.stats = { ...this.stats, unservedDemand: this.stats.unservedDemand + 1 }; return false; }
     this.queuePassenger(originStopId, { id, destinationStopId, arrivedAtSeconds: this.timeSeconds, farePaid: false });
     return true;
@@ -75,7 +83,8 @@ export class OperationsSimulation {
     if (!line?.active) { this.stats = { ...this.stats, unservedDemand: this.stats.unservedDemand + 1 }; return false; }
     const from = line.stopIds.indexOf(first.boardStopId);
     const to = line.stopIds.indexOf(first.alightStopId);
-    if (from < 0 || to <= from) { this.stats = { ...this.stats, unservedDemand: this.stats.unservedDemand + 1 }; return false; }
+    if (from < 0 || to < 0 || from === to) { this.stats = { ...this.stats, unservedDemand: this.stats.unservedDemand + 1 }; return false; }
+    if (to < from && line.direction !== 'bidirectional') { this.stats = { ...this.stats, unservedDemand: this.stats.unservedDemand + 1 }; return false; }
     const passenger: WaitingPassenger = {
       id,
       destinationStopId: first.alightStopId,
@@ -135,7 +144,7 @@ export class OperationsSimulation {
         this.vehicles = this.vehicles.filter((vehicle) => !(vehicle.lineId === line.id && this.isIdleAtTerminus(vehicle)));
         const start = this.network.getStop(line.stopIds[0])!;
         const id = `${line.id}-vehicle-${activeCount + 1}-${Math.floor(this.timeSeconds)}`;
-        const vehicle: VehicleRuntime = { id, lineId: line.id, vehicleTypeId: config.vehicleTypeId, state: 'DWELLING', stopIndex: 0, segmentProgressMeters: 0, dwellRemainingSeconds: 0, passengers: [], coordinate: start.coordinate };
+        const vehicle: VehicleRuntime = { id, lineId: line.id, vehicleTypeId: config.vehicleTypeId, state: 'DWELLING', stopIndex: 0, direction: 1, segmentProgressMeters: 0, dwellRemainingSeconds: 0, passengers: [], coordinate: start.coordinate };
         this.vehicles = [...this.vehicles, this.serviceStop(vehicle)];
         this.lastDispatch.set(line.id, this.timeSeconds);
       } else if (activeCount >= config.assignedVehicleCount && this.timeSeconds - last >= headwayMinutes * 60) {
@@ -152,14 +161,22 @@ export class OperationsSimulation {
     }
   }
 
+  /** Idle only after finishing a direction with no turnback (one-way terminus, or bidirectional after service stops). */
   private isIdleAtTerminus(vehicle: VehicleRuntime): boolean {
     const line = this.network.getLine(vehicle.lineId);
-    if (!line) return false;
-    return vehicle.stopIndex >= line.stopIds.length - 1 && !line.segments[vehicle.stopIndex] && vehicle.dwellRemainingSeconds <= 0;
+    if (!line || vehicle.dwellRemainingSeconds > 0) return false;
+    if (vehicle.direction === 1 && vehicle.stopIndex >= line.stopIds.length - 1 && !line.segments[vehicle.stopIndex]) return true;
+    if (vehicle.direction === -1 && vehicle.stopIndex <= 0) return true;
+    return false;
   }
 
   private countsAgainstFleet(vehicle: VehicleRuntime): boolean {
     return !this.isIdleAtTerminus(vehicle);
+  }
+
+  private canTurnback(line: TransitLine): boolean {
+    const config = this.configurations.get(line.id);
+    return line.direction === 'bidirectional' && Boolean(config?.active && line.active);
   }
 
   private moveVehicles(step: number): void {
@@ -169,10 +186,24 @@ export class OperationsSimulation {
       if (vehicle.state === 'DWELLING') {
         const remaining = vehicle.dwellRemainingSeconds - step;
         if (remaining > 0) return { ...vehicle, dwellRemainingSeconds: remaining };
-        // Finished terminus dwell: remain idle for map display until a replacement trip is dispatched.
-        if (!line.segments[vehicle.stopIndex]) return { ...vehicle, state: 'DWELLING', dwellRemainingSeconds: 0 };
+        if (this.isIdleAtTerminus({ ...vehicle, dwellRemainingSeconds: 0 })) {
+          return { ...vehicle, state: 'DWELLING', dwellRemainingSeconds: 0 };
+        }
         return { ...vehicle, state: 'TRAVELING', dwellRemainingSeconds: 0 };
       }
+
+      if (vehicle.direction === -1) {
+        const segment = line.segments[vehicle.stopIndex - 1];
+        if (!segment) return vehicle;
+        const geometry = [...segment.geometry].reverse();
+        const length = lineLength({ ...line, segments: [segment] });
+        const progressed = vehicle.segmentProgressMeters + template.maximumSpeedKph * 1000 / 3600 * step;
+        if (progressed < length) return { ...vehicle, segmentProgressMeters: progressed, coordinate: interpolatePolyline(geometry, progressed) };
+        const nextIndex = vehicle.stopIndex - 1;
+        const arrived = { ...vehicle, stopIndex: nextIndex, segmentProgressMeters: 0, coordinate: this.network.getStop(line.stopIds[nextIndex])!.coordinate };
+        return this.serviceStop(arrived);
+      }
+
       const segment = line.segments[vehicle.stopIndex];
       if (!segment) return vehicle;
       const length = lineLength({ ...line, segments: [segment] });
@@ -190,19 +221,41 @@ export class OperationsSimulation {
     const stopId = line.stopIds[vehicle.stopIndex];
     const alighting = vehicle.passengers.filter((passenger) => passenger.destinationStopId === stopId);
     const continuing = vehicle.passengers.filter((passenger) => passenger.destinationStopId !== stopId);
+    const previousLine = this.stats.byLine[line.id] ?? emptyLineStats();
     if (alighting.length) {
       this.stats = {
         ...this.stats,
         alightings: this.stats.alightings + alighting.length,
-        byLine: { ...this.stats.byLine, [line.id]: { boardings: this.stats.byLine[line.id]?.boardings ?? 0, alightings: (this.stats.byLine[line.id]?.alightings ?? 0) + alighting.length } },
+        byLine: {
+          ...this.stats.byLine,
+          [line.id]: {
+            boardings: previousLine.boardings,
+            alightings: previousLine.alightings + alighting.length,
+            totalWaitSeconds: previousLine.totalWaitSeconds ?? 0,
+          },
+        },
       };
       for (const passenger of alighting) this.handleAlight(passenger, stopId, line.mode);
     }
 
+    // Turnback at termini so bidirectional vehicles board reverse riders before departing.
+    const atOutboundEnd = vehicle.direction === 1 && vehicle.stopIndex >= line.stopIds.length - 1;
+    const atInboundEnd = vehicle.direction === -1 && vehicle.stopIndex <= 0;
+    const direction: 1 | -1 = (atOutboundEnd || atInboundEnd) && this.canTurnback(line)
+      ? (vehicle.direction === 1 ? -1 : 1)
+      : vehicle.direction;
+
     const queue = this.queues.get(stopId) ?? [];
-    // Only board passengers whose current destination is later on this vehicle's line.
-    const eligible = queue.filter((passenger) => line.stopIds.indexOf(passenger.destinationStopId) > vehicle.stopIndex);
-    const ineligible = queue.filter((passenger) => line.stopIds.indexOf(passenger.destinationStopId) <= vehicle.stopIndex);
+    const eligible = queue.filter((passenger) => {
+      const destIndex = line.stopIds.indexOf(passenger.destinationStopId);
+      if (direction === 1) return destIndex > vehicle.stopIndex;
+      return destIndex >= 0 && destIndex < vehicle.stopIndex;
+    });
+    const ineligible = queue.filter((passenger) => {
+      const destIndex = line.stopIds.indexOf(passenger.destinationStopId);
+      if (direction === 1) return destIndex <= vehicle.stopIndex;
+      return destIndex < 0 || destIndex >= vehicle.stopIndex;
+    });
     const available = template.capacity - continuing.length;
     const boarding = eligible.slice(0, Math.max(0, available));
     const leftEligible = eligible.slice(boarding.length);
@@ -214,22 +267,33 @@ export class OperationsSimulation {
     const mode = modeRegistry.getModeDefinition(line.mode);
     for (const passenger of boarding) {
       const wait = Math.max(0, this.timeSeconds - passenger.arrivedAtSeconds);
+      const lineStats = this.stats.byLine[line.id] ?? emptyLineStats();
       this.stats = {
         ...this.stats,
         boardings: this.stats.boardings + 1,
         totalWaitSeconds: this.stats.totalWaitSeconds + wait,
         maximumWaitSeconds: Math.max(this.stats.maximumWaitSeconds, wait),
-        byLine: { ...this.stats.byLine, [line.id]: { boardings: (this.stats.byLine[line.id]?.boardings ?? 0) + 1, alightings: this.stats.byLine[line.id]?.alightings ?? 0 } },
+        byLine: {
+          ...this.stats.byLine,
+          [line.id]: {
+            boardings: lineStats.boardings + 1,
+            alightings: lineStats.alightings,
+            totalWaitSeconds: (lineStats.totalWaitSeconds ?? 0) + wait,
+          },
+        },
       };
       this.recentBoardingsByStop.set(stopId, (this.recentBoardingsByStop.get(stopId) ?? 0) + 1);
       const shouldCharge = !passenger.farePaid || !mode.operations.defaultFare.freeTransfers;
       if (shouldCharge) {
-        this.events.push({ type: 'FARE_CHARGED', lineId: line.id, vehicleId: vehicle.id, passengerId: passenger.id, amountCents: mode.operations.defaultFare.fareCents, timestampSeconds: this.timeSeconds });
+        const service = this.configurations.get(line.id);
+        const fareCents = service?.customFareCents ?? mode.operations.defaultFare.fareCents;
+        this.events.push({ type: 'FARE_CHARGED', lineId: line.id, vehicleId: vehicle.id, passengerId: passenger.id, amountCents: fareCents, timestampSeconds: this.timeSeconds });
       }
     }
     const dwell = (mode.operations.defaultDwellSeconds + boarding.length + alighting.length) * template.dwellTimeModifier;
     return {
       ...vehicle,
+      direction,
       state: 'DWELLING',
       dwellRemainingSeconds: dwell,
       passengers: [...continuing, ...boarding.map((passenger) => ({ ...passenger, farePaid: true }))],

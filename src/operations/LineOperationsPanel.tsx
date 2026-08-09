@@ -1,5 +1,5 @@
 import { modeRegistry } from '../modes';
-import type { TransitNetwork } from '../transit';
+import { setLineActive, type TransitNetwork } from '../transit';
 import { lineDisplayColor } from '../transit/lineStyle';
 import type { SimulationEngine } from '../time';
 import type { SimulationSnapshot } from '../time';
@@ -24,12 +24,14 @@ export function LineOperationsPanel({
   engine,
   snapshot,
   onSnapshot,
+  onNetwork,
 }: {
   readonly network: TransitNetwork;
   readonly lineId: string;
   readonly engine: SimulationEngine;
   readonly snapshot: SimulationSnapshot;
   readonly onSnapshot: (snapshot: SimulationSnapshot) => void;
+  readonly onNetwork?: (network: TransitNetwork) => void;
 }) {
   const line = network.getLine(lineId);
   if (!line) return null;
@@ -51,11 +53,11 @@ export function LineOperationsPanel({
 
   const apply = (next: LineServiceConfiguration): void => {
     try {
+      if (next.active && !line.active && onNetwork) onNetwork(setLineActive(network, line.id, true));
       engine.configureLineService(next);
       onSnapshot(engine.snapshot());
-    } catch (error) {
+    } catch {
       onSnapshot(engine.snapshot());
-      throw error;
     }
   };
 
@@ -72,7 +74,7 @@ export function LineOperationsPanel({
         nighttimeHeadwayMinutes: clampHeadway(frequency.nighttimeHeadwayMinutes, minimum),
       },
     };
-    try { apply(next); } catch { /* validation surfaced via unchanged controls */ }
+    apply(next);
   };
 
   const vehicle = modeRegistry.getVehicleDefinition(configuration.vehicleTypeId);
@@ -80,8 +82,9 @@ export function LineOperationsPanel({
   const lineVehicles = ops?.vehicles.filter((item) => item.lineId === line.id) ?? [];
   const ridership = lineVehicles.reduce((sum, item) => sum + item.passengers.length, 0);
   const capacity = lineVehicles.reduce((sum, item) => sum + modeRegistry.getVehicleDefinition(item.vehicleTypeId).capacity, 0);
-  const boardings = ops?.statistics.byLine[line.id]?.boardings ?? 0;
-  const averageWait = ops && ops.statistics.boardings > 0 ? Math.round(ops.statistics.totalWaitSeconds / ops.statistics.boardings) : null;
+  const lineStats = ops?.statistics.byLine[line.id];
+  const boardings = lineStats?.boardings ?? 0;
+  const averageWait = boardings > 0 ? Math.round((lineStats?.totalWaitSeconds ?? 0) / boardings) : null;
   const hour = snapshot.calendar.hour;
   const currentHeadway = hour >= configuration.frequency.daytimeStartHour && hour < configuration.frequency.nighttimeStartHour
     ? configuration.frequency.daytimeHeadwayMinutes
@@ -93,6 +96,7 @@ export function LineOperationsPanel({
   const fareRevenue = snapshot.finances.lines.find((item) => item.lineId === line.id)?.fareRevenueCents ?? 0;
   const lineOperatingCost = snapshot.finances.lines.find((item) => item.lineId === line.id)?.operatingCostCents ?? 0;
   const lineWarnings = (ops?.warnings ?? []).filter((warning) => warning.includes(line.id) || warning.startsWith('Requested:'));
+  const serviceRunning = configuration.active && line.active;
 
   const headwayOptions = (selected: number) => {
     const values = [...new Set([...HEADWAY_PRESETS.filter((value) => value >= minimum), selected, minimum])].sort((a, b) => a - b);
@@ -105,14 +109,14 @@ export function LineOperationsPanel({
       <h3>{line.name}</h3>
       <dl className="operations-summary">
         <dt>Mode</dt><dd>{mode.name}</dd>
-        <dt>Service status</dt><dd>{configuration.active && line.active ? 'Running' : 'Stopped'}</dd>
+        <dt>Service status</dt><dd>{serviceRunning ? 'Running' : !line.active ? 'Stopped: topology inactive' : 'Stopped'}</dd>
         <dt>Current period</dt><dd>{snapshot.servicePeriod === 'daytime' ? 'Day service' : 'Night service'} · {formatHeadwayLabel(currentHeadway)}</dd>
         <dt>Assigned vehicle type</dt><dd>{vehicle.name}</dd>
         <dt>Vehicles assigned</dt><dd>{configuration.assignedVehicleCount}</dd>
         <dt>Vehicles required (est.)</dt><dd>{Number.isFinite(requiredVehicles) ? requiredVehicles : '—'}</dd>
         <dt>In service now</dt><dd>{lineVehicles.length}</dd>
         <dt>Current ridership</dt><dd>{ridership}{capacity ? ` / ${capacity}` : ''}</dd>
-        <dt>Average wait</dt><dd>{averageWait === null ? 'No boardings yet' : `${averageWait}s`}</dd>
+        <dt>Average wait</dt><dd>{averageWait === null ? '—' : `${averageWait}s`}</dd>
         <dt>Boardings (line)</dt><dd>{boardings}</dd>
         <dt>Operating cost</dt><dd>{money.format(operatingCostCents / 100)}/hr active · {money.format(lineOperatingCost / 100)} recorded</dd>
         <dt>Fare revenue</dt><dd>{money.format(fareRevenue / 100)} recorded</dd>
@@ -122,8 +126,29 @@ export function LineOperationsPanel({
         <button type="button" onClick={() => update({ active: !configuration.active })}>
           {configuration.active ? 'Stop Service' : 'Start Service'}
         </button>
+        {!line.active && onNetwork && (
+          <button type="button" className="secondary" onClick={() => onNetwork(setLineActive(network, line.id, true))}>Activate topology</button>
+        )}
       </div>
-      <p className="debug-note">Stop Service ends new dispatching. Vehicles already moving continue to the terminus and remain there.</p>
+      <p className="debug-note">Start Service enables dispatch and keeps topology active. Stop Service ends new dispatching; moving vehicles finish their current direction.</p>
+
+      <label>Ticket fare (USD)
+        <div className="input-with-unit">
+          <input
+            aria-label="Ticket fare"
+            type="number"
+            step="0.05"
+            min="0.00"
+            max="20.00"
+            value={((configuration.customFareCents ?? mode.operations.defaultFare.fareCents) / 100).toFixed(2)}
+            onChange={(event) => {
+              const val = Number(event.target.value);
+              const cents = Math.round(val * 100);
+              update({ customFareCents: Number.isFinite(cents) && cents >= 0 ? cents : undefined });
+            }}
+          />
+        </div>
+      </label>
 
       <label>Daytime headway
         <select aria-label="Daytime headway" value={configuration.frequency.daytimeHeadwayMinutes} onChange={(event) => update({ frequency: { daytimeHeadwayMinutes: Number(event.target.value) } })}>
@@ -159,7 +184,7 @@ export function LineOperationsPanel({
         </p>
       )}
       {lineWarnings.map((warning) => <p className="operations-warning" key={warning}>{warning}</p>)}
-      <p className="debug-note" style={{ borderLeftColor: lineDisplayColor(line) }}>Minimum headway for {mode.name}: {formatHeadwayLabel(minimum)}. Vehicles do not reverse yet; fleet support is a planning estimate.</p>
+      <p className="debug-note" style={{ borderLeftColor: lineDisplayColor(line) }}>Minimum headway for {mode.name}: {formatHeadwayLabel(minimum)}. Vehicles shuttle both directions; fleet support is a planning estimate.</p>
     </section>
   );
 }

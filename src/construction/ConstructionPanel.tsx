@@ -15,7 +15,7 @@ export interface ConstructionOverlayState {
   readonly pending?: ConstructionPreview;
 }
 
-export function ConstructionPanel({ mode, workflow, coordinate, clickVersion, hoverCoordinate, timestampSeconds, active, onOverlayChange, onEconomyChange }: {
+export function ConstructionPanel({ mode, workflow, coordinate, clickVersion, hoverCoordinate, timestampSeconds, active, onOverlayChange, onEconomyChange, onCommitSuccess, onViewLoans }: {
   readonly mode: PlayerConstructionMode;
   readonly workflow: ConstructionWorkflow;
   readonly coordinate: Coordinate | null;
@@ -25,6 +25,8 @@ export function ConstructionPanel({ mode, workflow, coordinate, clickVersion, ho
   readonly active: boolean;
   readonly onOverlayChange: (overlay: ConstructionOverlayState) => void;
   readonly onEconomyChange: () => void;
+  readonly onCommitSuccess?: (estimate: ConstructionPreview['evaluation']['estimate']) => void;
+  readonly onViewLoans?: () => void;
 }) {
   const [action, setAction] = useState<ConstructionAction>(mode === 'SUBWAY' ? 'station' : 'tram-alignment');
   const [start, setStart] = useState<Coordinate | null>(null);
@@ -156,6 +158,7 @@ export function ConstructionPanel({ mode, workflow, coordinate, clickVersion, ho
       onOverlayChange(workflow.snapshot());
       return;
     }
+    onCommitSuccess?.(result.preview.evaluation.estimate);
     onEconomyChange();
     onOverlayChange(workflow.snapshot());
     setPreview(undefined);
@@ -186,6 +189,7 @@ export function ConstructionPanel({ mode, workflow, coordinate, clickVersion, ho
     <div className="proposal-actions">
       <button type="button" className="secondary" onClick={() => resetProposal(action === 'station' ? 'Station proposal cancelled. Move over the map to preview another site.' : 'Alignment cancelled. Click the map to set a new start.')}>Cancel</button>
       <button type="button" disabled={!locked || !preview?.evaluation.valid || !preview.affordable} onClick={confirm}>Build</button>
+      {preview && !preview.affordable && onViewLoans && <button type="button" className="secondary" onClick={onViewLoans}>View loans</button>}
     </div>
     <div className="project-counts">
       <span><strong>{workflow.snapshot().state.stations.length}</strong> stations built</span>

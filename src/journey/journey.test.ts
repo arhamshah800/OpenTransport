@@ -39,8 +39,7 @@ const corridorFor = (home: { latitude: number; longitude: number }, job: { latit
   let network = new TransitNetwork();
   network = createStop(network, { id: 'home', name: 'Home', coordinate: home, kind: 'stop', supportedModes: ['BUS'] });
   network = createStop(network, { id: 'job', name: 'Job', coordinate: job, kind: 'stop', supportedModes: ['BUS'] });
-  network = createLine(network, makeLine('bus', 'Bus', 'BUS', ['home', 'job'], network));
-  return createLine(network, makeLine('bus-return', 'Bus Return', 'BUS', ['job', 'home'], network));
+  return createLine(network, makeLine('bus', 'Bus', 'BUS', ['home', 'job'], network));
 };
 
 describe('Journey planning and passenger lifecycle', () => {
@@ -51,6 +50,25 @@ describe('Journey planning and passenger lifecycle', () => {
     if (plan.status !== 'planned') return;
     expect(plan.legs).toHaveLength(1);
     expect(plan.legs[0]).toMatchObject({ lineId: 'bus', boardStopId: 'a', alightStopId: 'b' });
+  });
+
+  it('plans a return trip on a single bidirectional line', () => {
+    const network = directBusNetwork();
+    expect(network.getLine('bus')?.direction).toBe('bidirectional');
+    const plan = planJourney(point(41.8801, -87.6289), point(41.8801, -87.6301), network, [service('bus')]);
+    expect(plan.status).toBe('planned');
+    if (plan.status !== 'planned') return;
+    expect(plan.legs).toHaveLength(1);
+    expect(plan.legs[0]).toMatchObject({ lineId: 'bus', boardStopId: 'b', alightStopId: 'a' });
+  });
+
+  it('completes a reverse ride on a bidirectional line', () => {
+    const network = directBusNetwork();
+    const operations = new OperationsSimulation(network, [service('bus', true, 4)]);
+    expect(operations.enqueueJourney('return-1', [{ lineId: 'bus', boardStopId: 'b', alightStopId: 'a' }])).toBe(true);
+    operations.advance(20 * 60);
+    expect(operations.drainCompletedTrips()).toContain('return-1');
+    expect(operations.snapshot().statistics.completedTrips).toBe(1);
   });
 
   it('returns UNSERVED when no service is active', () => {
@@ -141,7 +159,6 @@ describe('Journey planning and passenger lifecycle', () => {
     const network = corridorFor(worker!.home, worker!.workplaceCoordinate!);
     const engine = new SimulationEngine(world, economy, network, { seed: 12345 });
     engine.configureLineService({ ...service('bus', true, 5), lineId: 'bus', assignedVehicleCount: 8 });
-    engine.configureLineService({ ...service('bus-return', true, 5), lineId: 'bus-return', assignedVehicleCount: 8 });
     engine.advanceBy(9 * 3600 + 30 * 60);
     const morning = engine.snapshot();
     expect((morning.operations?.statistics.boardings ?? 0) + morning.population.traveling).toBeGreaterThan(0);
@@ -151,20 +168,20 @@ describe('Journey planning and passenger lifecycle', () => {
     expect(economy.getLedger().some((entry) => entry.category === 'FARE_REVENUE')).toBe(true);
   }, 60_000);
 
-  it('replans future demand after network changes', () => {
+  it('replans pending same-day demand after network changes', () => {
     const world = new World(testCity);
     const economy = new Economy(world.definition.economy.startingBudget);
     const engine = new SimulationEngine(world, economy, new TransitNetwork(), { seed: 99 });
     const worker = engine.getPopulation().getResidents().find((resident) => resident.workplaceCoordinate)!;
     engine.advanceBy(worker.outboundDepartureMinute * 60 + 60);
-    expect(engine.snapshot().population.unservedTrips).toBeGreaterThan(0);
+    const pending = engine.getPopulation().getTravelRequests().filter((request) => request.status === 'unresolved').length;
+    expect(pending).toBeGreaterThan(0);
+    expect(engine.snapshot().population.unservedTrips).toBe(0);
     engine.syncNetwork(corridorFor(worker.home, worker.workplaceCoordinate!));
     engine.configureLineService({ ...service('bus', true, 5), lineId: 'bus', assignedVehicleCount: 6 });
-    engine.configureLineService({ ...service('bus-return', true, 5), lineId: 'bus-return', assignedVehicleCount: 6 });
-    // Next calendar day so a fresh outbound request is planned against the new network.
-    const toNextMorning = (24 * 60 - (engine.snapshot().population.absoluteMinutes % 1440) + worker.outboundDepartureMinute + 30) * 60;
-    engine.advanceBy(toNextMorning);
-    expect(engine.snapshot().operations?.statistics.boardings ?? 0).toBeGreaterThan(0);
+    engine.replanPendingDemand();
+    engine.advanceBy(2 * 3600);
+    expect((engine.snapshot().operations?.statistics.boardings ?? 0) + engine.snapshot().population.traveling).toBeGreaterThan(0);
   }, 60_000);
 
   it('serves Port Junction corridor demand when a route covers home-to-work geography', () => {
