@@ -16,3 +16,4 @@ export function createBaseSources(world: World): Record<string, Collection> { co
 }; }
 export function createTransitSource(overlay: TransitOverlay): Collection { return collection(overlay.lines.map((line) => ({ type: 'Feature', properties: { id: line.id, color: line.color ?? '#ef6c45' }, geometry: { type: 'LineString', coordinates: line.geometry.map(coordinate) } }))); }
 export function createTransitStopsSource(overlay: TransitOverlay): Collection { return collection(overlay.stops.map((stop) => ({ type: 'Feature', properties: { id: stop.id, name: stop.name ?? '' }, geometry: { type: 'Point', coordinates: coordinate(stop.coordinate) } }))); }
+export function createTransitVehiclesSource(overlay: TransitOverlay): Collection { return collection((overlay.vehicles ?? []).map((vehicle) => ({ type: 'Feature', properties: { id: vehicle.id, color: vehicle.color ?? '#17211e' }, geometry: { type: 'Point', coordinates: coordinate(vehicle.coordinate) } }))); }

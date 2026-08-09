@@ -1,7 +1,7 @@
 import * as maplibregl from 'maplibre-gl';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { World } from '../world';
-import { createBaseSources, createTransitSource, createTransitStopsSource } from './layers';
+import { createBaseSources, createTransitSource, createTransitStopsSource, createTransitVehiclesSource } from './layers';
 import type { MapController, MapLayerVisibility, MapSelection, PopulationDisplayMode, TransitOverlay } from './types';
 
 const sourceId = (name: string): string => `open-transport-${name}`;
@@ -28,6 +28,7 @@ export class MapLibreController implements MapController {
     for (const [name, data] of Object.entries(createBaseSources(this.world))) this.map.addSource(sourceId(name), { type: 'geojson', data, promoteId: 'id' });
     this.map.addSource(sourceId('transit'), { type: 'geojson', data: createTransitSource(this.transitOverlay) });
     this.map.addSource(sourceId('transit-stops'), { type: 'geojson', data: createTransitStopsSource(this.transitOverlay) });
+    this.map.addSource(sourceId('transit-vehicles'), { type: 'geojson', data: createTransitVehiclesSource(this.transitOverlay) });
     this.map.addLayer({ id: layerId('water'), type: 'line', source: sourceId('water'), paint: { 'line-color': '#4d97bd', 'line-width': 11, 'line-opacity': 0.72 } });
     this.map.addLayer({ id: layerId('buildings'), type: 'fill', source: sourceId('buildings'), paint: { 'fill-color': ['case', ['boolean', ['feature-state', 'selected'], false], '#f2b663', '#d4d6cf'], 'fill-opacity': .84 } });
     this.map.addLayer({ id: layerId('building-outline'), type: 'line', source: sourceId('buildings'), paint: { 'line-color': '#aeb5ac', 'line-width': 1 } });
@@ -43,6 +44,7 @@ export class MapLibreController implements MapController {
     this.map.addLayer({ id: layerId('bounds'), type: 'line', source: sourceId('bounds'), paint: { 'line-color': '#e17055', 'line-dasharray': [2, 2], 'line-width': 2 } });
     this.map.addLayer({ id: layerId('transit'), type: 'line', source: sourceId('transit'), paint: { 'line-color': ['get', 'color'], 'line-width': 5, 'line-opacity': .9 } });
     this.map.addLayer({ id: layerId('transit-stops'), type: 'circle', source: sourceId('transit-stops'), paint: { 'circle-color': '#fffefa', 'circle-radius': 6, 'circle-stroke-color': '#ef6c45', 'circle-stroke-width': 3 } });
+    this.map.addLayer({ id: layerId('transit-vehicles'), type: 'circle', source: sourceId('transit-vehicles'), paint: { 'circle-color': ['get', 'color'], 'circle-radius': 7, 'circle-stroke-color': '#fffefa', 'circle-stroke-width': 2 } });
     this.bindInteractions(); this.applyVisibility(); this.resetCamera();
   }
   private bindInteractions(): void {
@@ -55,7 +57,7 @@ export class MapLibreController implements MapController {
   public setPopulationMode(mode: PopulationDisplayMode): void { this.visibility = { ...this.visibility, population: mode }; this.applyVisibility(); }
   public setLayerVisibility(layer: keyof Omit<MapLayerVisibility, 'population'>, visible: boolean): void { this.visibility = { ...this.visibility, [layer]: visible }; this.applyVisibility(); }
   private applyVisibility(): void { if (!this.map.isStyleLoaded()) return; const visible = (id: string, value: boolean): void => { this.map.setLayoutProperty(layerId(id), 'visibility', value ? 'visible' : 'none'); }; visible('population-points', this.visibility.population === 'points'); visible('population-density', this.visibility.population === 'density'); visible('workplaces', this.visibility.workplaces); visible('pois', this.visibility.pois); visible('water', this.visibility.water); visible('road-ids', this.visibility.roadIds); visible('building-ids', this.visibility.buildingIds); visible('bounds', this.visibility.bounds); }
-  public setTransitOverlay(overlay: TransitOverlay): void { this.transitOverlay = overlay; const lines = this.map.getSource(sourceId('transit')); if (lines instanceof maplibregl.GeoJSONSource) lines.setData(createTransitSource(overlay)); const stops = this.map.getSource(sourceId('transit-stops')); if (stops instanceof maplibregl.GeoJSONSource) stops.setData(createTransitStopsSource(overlay)); }
+  public setTransitOverlay(overlay: TransitOverlay): void { this.transitOverlay = overlay; const lines = this.map.getSource(sourceId('transit')); if (lines instanceof maplibregl.GeoJSONSource) lines.setData(createTransitSource(overlay)); const stops = this.map.getSource(sourceId('transit-stops')); if (stops instanceof maplibregl.GeoJSONSource) stops.setData(createTransitStopsSource(overlay)); const vehicles = this.map.getSource(sourceId('transit-vehicles')); if (vehicles instanceof maplibregl.GeoJSONSource) vehicles.setData(createTransitVehiclesSource(overlay)); }
   public coordinateFromScreen(x: number, y: number): { readonly latitude: number; readonly longitude: number } { const coordinate = this.map.unproject([x, y]); return { latitude: coordinate.lat, longitude: coordinate.lng }; }
   public resetCamera(): void { const { southWest, northEast } = this.world.definition.bounds; this.map.fitBounds([[southWest.longitude, southWest.latitude], [northEast.longitude, northEast.latitude]], { padding: 56, duration: 450 }); }
   public destroy(): void { this.options.container.removeEventListener('click', this.handleContainerClick); this.map.remove(); }
