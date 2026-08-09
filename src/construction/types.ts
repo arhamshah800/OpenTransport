@@ -4,7 +4,7 @@ import type { ModeId } from '../modes';
 /** Elevations are meters relative to street level: surface is 0 and underground values are negative. */
 export interface VerticalProfile { readonly startElevationMeters: number; readonly endElevationMeters: number; }
 export interface EngineeringSegment { readonly id: string; readonly mode: ModeId; readonly geometry: readonly Coordinate[]; readonly verticalProfile?: VerticalProfile; }
-export interface StationFootprint { readonly center: Coordinate; readonly widthMeters: number; readonly lengthMeters: number; readonly rotationDegrees?: number; }
+export interface StationFootprint { readonly id?: string; readonly center: Coordinate; readonly widthMeters: number; readonly lengthMeters: number; readonly rotationDegrees?: number; }
 export type ConstructionProposal =
   | { readonly kind: 'station'; readonly id: string; readonly mode: 'SUBWAY'; readonly footprint: StationFootprint; readonly elevationMeters: number; }
   | { readonly kind: 'alignment'; readonly id: string; readonly mode: ModeId; readonly geometry: readonly Coordinate[]; readonly verticalProfile?: VerticalProfile; };

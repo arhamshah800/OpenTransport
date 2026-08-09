@@ -3,4 +3,6 @@ export { addStopToLine, createLine, createStop, createTransferComplex, deleteLin
 export { TransitGraph } from './graph';
 export { getConnectedTransitEdges, getLinesServingStop, getStopsNearCoordinate } from './queries';
 export { deserializeTransitNetwork, serializeTransitNetwork } from './serialization';
+export { makeServiceLine, busStopValidator, routeBusSegments, snapBusStopCoordinate, routeGuidewaySegments, constructionServiceValidator, stationsConnectedBySubway, nearestGuidewayPoint, findConstructedStation, canCreateTransfer } from './serviceBuilder';
+export { nextLineColor, lineDisplayColor } from './lineStyle';
 export type * from './types';

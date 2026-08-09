@@ -1,3 +1,3 @@
 export { SimulationEngine } from './SimulationEngine';
-export { SimulationControls } from './SimulationControls';
+export { DevelopmentTimeControls, SimulationControls, simulationTimeLabel } from './SimulationControls';
 export type * from './types';

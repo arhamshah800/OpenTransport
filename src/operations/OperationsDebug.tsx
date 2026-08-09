@@ -1,6 +1,39 @@
-import { useEffect, useState } from 'react';
+import type { SimulationEngine } from '../time';
+import type { SimulationSnapshot } from '../time';
 import { modeRegistry } from '../modes';
-import { TransitNetwork } from '../transit';
-import { OperationsSimulation } from './OperationsSimulation';
-import type { OperationsEvent, OperationsSnapshot } from './types';
-export function OperationsDebug({ network, onSnapshot, onEvents }: { readonly network: TransitNetwork; readonly onSnapshot?: (snapshot: OperationsSnapshot) => void; readonly onEvents?: (events: readonly OperationsEvent[]) => void }) { const [simulation, setSimulation] = useState<OperationsSimulation | null>(null); const [snapshot, setSnapshot] = useState<OperationsSnapshot | null>(null); useEffect(() => { const line = network.definition.lines[0]; if (!line) { setSimulation(null); setSnapshot(null); return; } const mode = modeRegistry.getModeDefinition(line.mode); const next = new OperationsSimulation(network, [{ lineId: line.id, active: true, vehicleTypeId: mode.vehicleIds[0], assignedVehicleCount: 2, frequency: mode.operations.defaultFrequency }]); setSimulation(next); setSnapshot(next.snapshot()); }, [network]); useEffect(() => { if (snapshot) onSnapshot?.(snapshot); }, [snapshot, onSnapshot]); const advance = (seconds: number): void => { if (!simulation) return; simulation.advance(seconds); onEvents?.(simulation.drainEvents()); setSnapshot(simulation.snapshot()); }; if (!snapshot) return <section className="operations-debug"><p className="eyebrow">OPERATIONS</p><h2>Service control</h2><p className="debug-note">Create a transit line to begin operating service.</p></section>; const line = network.getLine(snapshot.vehicles[0]?.lineId ?? network.definition.lines[0].id)!; const mode = modeRegistry.getModeDefinition(line.mode); return <section className="operations-debug"><p className="eyebrow">OPERATIONS</p><h2>{line.name}</h2><dl><dt>Mode</dt><dd>{mode.name}</dd><dt>Day / night frequency</dt><dd>{mode.operations.defaultFrequency.daytimeHeadwayMinutes} / {mode.operations.defaultFrequency.nighttimeHeadwayMinutes} min</dd><dt>Vehicle type</dt><dd>{modeRegistry.getVehicleDefinition(mode.vehicleIds[0]).name}</dd><dt>Vehicles running</dt><dd>{snapshot.vehicles.length}</dd><dt>Current passengers</dt><dd>{snapshot.vehicles.reduce((sum, vehicle) => sum + vehicle.passengers.length, 0)}</dd><dt>Boardings</dt><dd>{snapshot.statistics.boardings}</dd><dt>Average wait</dt><dd>{snapshot.statistics.boardings ? Math.round(snapshot.statistics.totalWaitSeconds / snapshot.statistics.boardings) : 0}s</dd></dl><button type="button" onClick={() => advance(60)}>Advance 1 minute</button><button type="button" onClick={() => advance(600)}>Advance 10 minutes</button>{snapshot.warnings.map((warning) => <p className="debug-note" key={warning}>{warning}</p>)}</section>; }
+import { formatHeadwayLabel } from './fleetPlanning';
+
+/** Developer inspection of the shared OperationsSimulation — never a second clock. */
+export function OperationsDebug({ engine, snapshot }: { readonly engine: SimulationEngine; readonly snapshot: SimulationSnapshot }) {
+  const ops = snapshot.operations;
+  const services = engine.listLineServices();
+  if (!ops || services.length === 0) {
+    return <section className="operations-debug"><p className="eyebrow">OPERATIONS</p><h2>Dispatch inspector</h2><p className="debug-note">Create a transit line, then use the shared simulation clock.</p></section>;
+  }
+  return (
+    <section className="operations-debug">
+      <p className="eyebrow">OPERATIONS</p>
+      <h2>Dispatch inspector</h2>
+      <p className="debug-note">Period: {snapshot.servicePeriod === 'daytime' ? 'Day' : 'Night'} · Vehicles: {ops.vehicles.length} · Queued passengers: {Object.values(ops.queues).reduce((sum, queue) => sum + queue.length, 0)}</p>
+      <ul className="network-list">
+        {services.map((service) => {
+          const vehicle = modeRegistry.getVehicleDefinition(service.vehicleTypeId);
+          const running = ops.vehicles.filter((item) => item.lineId === service.lineId).length;
+          return (
+            <li key={service.lineId}>
+              <strong>{service.lineId}</strong>
+              <small>{service.active ? 'Active' : 'Stopped'} · {vehicle.name} · fleet {service.assignedVehicleCount} · in service {running} · day {formatHeadwayLabel(service.frequency.daytimeHeadwayMinutes)} / night {formatHeadwayLabel(service.frequency.nighttimeHeadwayMinutes)}</small>
+            </li>
+          );
+        })}
+      </ul>
+      <dl>
+        <dt>Boardings</dt><dd>{ops.statistics.boardings}</dd>
+        <dt>Denied boardings</dt><dd>{ops.statistics.deniedBoardings}</dd>
+        <dt>Unserved demand</dt><dd>{ops.statistics.unservedDemand}</dd>
+        <dt>Average wait</dt><dd>{ops.statistics.boardings ? `${Math.round(ops.statistics.totalWaitSeconds / ops.statistics.boardings)}s` : '—'}</dd>
+      </dl>
+      {ops.warnings.map((warning) => <p className="debug-note" key={warning}>{warning}</p>)}
+    </section>
+  );
+}

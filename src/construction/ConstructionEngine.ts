@@ -6,7 +6,7 @@ import { modeRegistry } from '../modes';
 
 const emptyState = (): ConstructionState => ({ demolishedBuildingIds: [], engineeringSegments: [], stations: [] });
 const polylineLength = (line: readonly Coordinate[]): number => line.slice(1).reduce((total, point, index) => total + distanceMeters(line[index], point), 0);
-const asPolygon = (footprint: StationFootprint): Coordinate[] => {
+export const stationFootprintPolygon = (footprint: StationFootprint): Coordinate[] => {
   const latScale = 1 / 111_111; const lonScale = 1 / (111_111 * Math.cos(footprint.center.latitude * Math.PI / 180));
   const halfLat = footprint.lengthMeters * latScale / 2; const halfLon = footprint.widthMeters * lonScale / 2;
   return [{ latitude: footprint.center.latitude - halfLat, longitude: footprint.center.longitude - halfLon }, { latitude: footprint.center.latitude - halfLat, longitude: footprint.center.longitude + halfLon }, { latitude: footprint.center.latitude + halfLat, longitude: footprint.center.longitude + halfLon }, { latitude: footprint.center.latitude + halfLat, longitude: footprint.center.longitude - halfLon }];
@@ -18,7 +18,7 @@ const linesIntersect = (first: readonly Coordinate[], second: readonly Coordinat
 export class ConstructionEngine {
   public constructor(private readonly world: World, private readonly configuration: EngineeringConfiguration = defaultEngineeringConfiguration) {}
   public evaluate(proposal: ConstructionProposal, state: ConstructionState = emptyState()): ConstructionEvaluation {
-    const issues: ConstructionIssue[] = []; if (proposal.kind === 'alignment') modeRegistry.getModeDefinition(proposal.mode); const geometry = proposal.kind === 'alignment' ? proposal.geometry : asPolygon(proposal.footprint);
+    const issues: ConstructionIssue[] = []; if (proposal.kind === 'alignment') modeRegistry.getModeDefinition(proposal.mode); const geometry = proposal.kind === 'alignment' ? proposal.geometry : stationFootprintPolygon(proposal.footprint);
     const length = proposal.kind === 'alignment' ? polylineLength(geometry) : 0;
     if (proposal.kind === 'alignment' && geometry.length < 2) issues.push({ code: 'INVALID_GEOMETRY', severity: 'error', message: 'An alignment needs at least two coordinates.' });
     const demolitions = proposal.kind === 'station' ? this.world.definition.buildings.filter((building) => !state.demolishedBuildingIds.includes(building.id) && polygonsIntersect(geometry, building.footprint)).map((building) => ({ buildingId: building.id, cost: building.acquisitionValue })) : [];
@@ -39,5 +39,14 @@ export class ConstructionEngine {
     const valid = issues.every((issue) => issue.severity !== 'error'); const infrastructure: EngineeringSegment | StationFootprint = proposal.kind === 'station' ? proposal.footprint : { id: proposal.id, mode: proposal.mode, geometry: proposal.geometry, verticalProfile: proposal.verticalProfile };
     return { valid, issues, estimate, plan: valid ? { proposal, estimate, infrastructure, demolishedBuildingIds: demolitions.map((impact) => impact.buildingId) } : undefined };
   }
-  public commit(plan: NonNullable<ConstructionEvaluation['plan']>, state: ConstructionState = emptyState()): ConstructionState { return { demolishedBuildingIds: [...new Set([...state.demolishedBuildingIds, ...plan.demolishedBuildingIds])], engineeringSegments: 'mode' in plan.infrastructure ? [...state.engineeringSegments, plan.infrastructure] : state.engineeringSegments, stations: 'mode' in plan.infrastructure ? state.stations : [...state.stations, plan.infrastructure] }; }
+  public commit(plan: NonNullable<ConstructionEvaluation['plan']>, state: ConstructionState = emptyState()): ConstructionState {
+    const stations = 'mode' in plan.infrastructure
+      ? state.stations
+      : [...state.stations, plan.proposal.kind === 'station' ? { ...plan.infrastructure, id: plan.proposal.id } : plan.infrastructure];
+    return {
+      demolishedBuildingIds: [...new Set([...state.demolishedBuildingIds, ...plan.demolishedBuildingIds])],
+      engineeringSegments: 'mode' in plan.infrastructure ? [...state.engineeringSegments, plan.infrastructure] : state.engineeringSegments,
+      stations,
+    };
+  }
 }

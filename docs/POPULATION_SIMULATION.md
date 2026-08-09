@@ -10,9 +10,11 @@ The Population module turns fixed, aggregated level population into a manageable
 
 ## Time and requests
 
-`PopulationSimulation.tick({ absoluteMinutes })` advances only when the central `SimulationEngine` supplies time; it owns no timer. At its scheduled time a resident emits a `TravelRequest` with an origin, destination, desired departure minute, and purpose (`work`, `activity`, or `return`). Requests remain `unresolved` until a future routing module handles them.
+`PopulationSimulation.tick({ absoluteMinutes })` advances only when the central `SimulationEngine` supplies time; it owns no timer. At its scheduled time a resident emits a `TravelRequest` with an origin, destination, desired departure minute, and purpose (`work`, `activity`, or `return`).
 
-For development, `resolveAllWithAlternativeMode` explicitly records an `assumedAlternativeMode` fallback and moves the agent to its endpoint without inventing a transit journey. This makes the evening return-demand path inspectable while keeping routing outside the module.
+The shared simulation engine plans each unresolved request against the live transit network and operations service configs. Planned trips move residents to `Traveling` and enqueue multi-leg journeys into Operations; unreachable demand is marked `unserved` (agents still relocate for schedule continuity). Completed Operations trips mark requests `completed` and place residents at their destination or home.
+
+For development, `resolveAllWithAlternativeMode` still records an `assumedAlternativeMode` fallback without inventing a transit journey.
 
 ## Outputs and boundaries
 

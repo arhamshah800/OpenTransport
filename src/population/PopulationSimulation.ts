@@ -3,15 +3,113 @@ import { generateResidents } from './generation';
 import { ResidentState, type PopulationGenerationOptions, type PopulationSummary, type Resident, type SimulationContext, type TravelRequest, type TripPurpose } from './types';
 
 export class PopulationSimulation {
-  private residents: Resident[]; private requests: TravelRequest[] = []; private activeDay = 0; private currentMinute = 0;
-  public constructor(world: World, options: PopulationGenerationOptions) { this.residents = [...generateResidents(world, options)]; }
+  private residents: Resident[];
+  private requests: TravelRequest[] = [];
+  private requestIds = new Set<string>();
+  private activeDay = 0;
+  private currentMinute = 0;
+  private servedTrips = 0;
+  private unservedTrips = 0;
+
+  public constructor(world: World, options: PopulationGenerationOptions) {
+    this.residents = [...generateResidents(world, options)];
+  }
+
   public getResidents(): readonly Resident[] { return this.residents; }
   public getTravelRequests(): readonly TravelRequest[] { return this.requests; }
-  public tick(context: SimulationContext): void { if (!Number.isFinite(context.absoluteMinutes) || context.absoluteMinutes < this.currentMinute) throw new Error('Simulation time must move forward using nonnegative minutes'); this.currentMinute = Math.floor(context.absoluteMinutes); const day = Math.floor(this.currentMinute / 1440); if (day !== this.activeDay) { this.activeDay = day; this.residents = this.residents.map((resident) => ({ ...resident, state: ResidentState.AtHome, currentDestination: undefined })); }
-    const minuteOfDay = this.currentMinute % 1440; this.residents.forEach((resident) => { if (resident.state === ResidentState.AtHome && minuteOfDay >= resident.outboundDepartureMinute) this.request(resident, resident.dailyPurpose, resident.dailyPurpose === 'work' ? resident.workplaceCoordinate : resident.activityCoordinate); else if (resident.state === ResidentState.AtDestination && minuteOfDay >= resident.returnDepartureMinute) this.request(resident, 'return', resident.home); }); }
-  private request(resident: Resident, purpose: TripPurpose, destination: Resident['home'] | undefined): void { if (!destination) return; const id = `day-${this.activeDay}-${resident.id}-${purpose}`; if (this.requests.some((request) => request.id === id)) return; const origin = purpose === 'return' ? (resident.currentDestination ?? resident.home) : resident.home; this.requests.push({ id, residentId: resident.id, origin, destination, desiredDepartureMinute: this.currentMinute, purpose, status: 'unresolved' }); this.replaceResident(resident.id, { state: ResidentState.RequestingRoute, currentDestination: destination }); }
-  public resolveRequestWithAlternativeMode(id: string): void { const request = this.requests.find((item) => item.id === id); if (!request || request.status !== 'unresolved') return; this.requests = this.requests.map((item) => item.id === id ? { ...item, status: 'assumedAlternativeMode' } : item); this.replaceResident(request.residentId, { state: request.purpose === 'return' ? ResidentState.AtHome : ResidentState.AtDestination, currentDestination: request.purpose === 'return' ? undefined : request.destination }); }
-  public resolveAllWithAlternativeMode(): void { this.requests.filter((request) => request.status === 'unresolved').forEach((request) => this.resolveRequestWithAlternativeMode(request.id)); }
-  private replaceResident(id: string, patch: Pick<Resident, 'state' | 'currentDestination'>): void { this.residents = this.residents.map((resident) => resident.id === id ? { ...resident, ...patch } : resident); }
-  public summary(): PopulationSummary { const states = (state: ResidentState): number => this.residents.filter((resident) => resident.state === state).length; return { absoluteMinutes: this.currentMinute, atHome: states(ResidentState.AtHome), requestingRoute: states(ResidentState.RequestingRoute), atDestination: states(ResidentState.AtDestination), activeRequests: this.requests.filter((request) => request.status === 'unresolved').length, returnTripsPending: this.requests.filter((request) => request.purpose === 'return' && request.status === 'unresolved').length }; }
+
+  public tick(context: SimulationContext): void {
+    if (!Number.isFinite(context.absoluteMinutes) || context.absoluteMinutes < this.currentMinute) {
+      throw new Error('Simulation time must move forward using nonnegative minutes');
+    }
+    this.currentMinute = Math.floor(context.absoluteMinutes);
+    const day = Math.floor(this.currentMinute / 1440);
+    if (day !== this.activeDay) {
+      this.activeDay = day;
+      this.residents = this.residents.map((resident) => ({ ...resident, state: ResidentState.AtHome, currentDestination: undefined }));
+      // Drop resolved demand logs; keep in-flight trips so Operations completions still resolve.
+      this.requests = this.requests.filter((request) => request.status === 'inTransit');
+      this.requestIds = new Set(this.requests.map((request) => request.id));
+    }
+    const minuteOfDay = this.currentMinute % 1440;
+    this.residents.forEach((resident) => {
+      if (resident.state === ResidentState.AtHome && minuteOfDay >= resident.outboundDepartureMinute) {
+        this.request(resident, resident.dailyPurpose, resident.dailyPurpose === 'work' ? resident.workplaceCoordinate : resident.activityCoordinate);
+      } else if (resident.state === ResidentState.AtDestination && minuteOfDay >= resident.returnDepartureMinute) {
+        this.request(resident, 'return', resident.home);
+      }
+    });
+  }
+
+  private request(resident: Resident, purpose: TripPurpose, destination: Resident['home'] | undefined): void {
+    if (!destination) return;
+    const id = `day-${this.activeDay}-${resident.id}-${purpose}`;
+    if (this.requestIds.has(id)) return;
+    const origin = purpose === 'return' ? (resident.currentDestination ?? resident.home) : resident.home;
+    this.requests.push({ id, residentId: resident.id, origin, destination, desiredDepartureMinute: this.currentMinute, purpose, status: 'unresolved' });
+    this.requestIds.add(id);
+    this.replaceResident(resident.id, { state: ResidentState.RequestingRoute, currentDestination: destination });
+  }
+
+  public assignTransitJourney(requestId: string): void {
+    const request = this.requests.find((item) => item.id === requestId);
+    if (!request || request.status !== 'unresolved') return;
+    this.requests = this.requests.map((item) => item.id === requestId ? { ...item, status: 'inTransit' } : item);
+    this.replaceResident(request.residentId, { state: ResidentState.Traveling, currentDestination: request.destination });
+  }
+
+  public completeTransitJourney(requestId: string): void {
+    const request = this.requests.find((item) => item.id === requestId);
+    if (!request || (request.status !== 'inTransit' && request.status !== 'unresolved')) return;
+    this.requests = this.requests.map((item) => item.id === requestId ? { ...item, status: 'completed' } : item);
+    this.servedTrips += 1;
+    this.replaceResident(request.residentId, {
+      state: request.purpose === 'return' ? ResidentState.AtHome : ResidentState.AtDestination,
+      currentDestination: request.purpose === 'return' ? undefined : request.destination,
+    });
+  }
+
+  public markRequestUnserved(requestId: string): void {
+    const request = this.requests.find((item) => item.id === requestId);
+    if (!request || request.status !== 'unresolved') return;
+    this.requests = this.requests.map((item) => item.id === requestId ? { ...item, status: 'unserved' } : item);
+    this.unservedTrips += 1;
+    this.replaceResident(request.residentId, {
+      state: request.purpose === 'return' ? ResidentState.AtHome : ResidentState.AtDestination,
+      currentDestination: request.purpose === 'return' ? undefined : request.destination,
+    });
+  }
+
+  public resolveRequestWithAlternativeMode(id: string): void {
+    const request = this.requests.find((item) => item.id === id);
+    if (!request || request.status !== 'unresolved') return;
+    this.requests = this.requests.map((item) => item.id === id ? { ...item, status: 'assumedAlternativeMode' } : item);
+    this.replaceResident(request.residentId, {
+      state: request.purpose === 'return' ? ResidentState.AtHome : ResidentState.AtDestination,
+      currentDestination: request.purpose === 'return' ? undefined : request.destination,
+    });
+  }
+
+  public resolveAllWithAlternativeMode(): void {
+    this.requests.filter((request) => request.status === 'unresolved').forEach((request) => this.resolveRequestWithAlternativeMode(request.id));
+  }
+
+  private replaceResident(id: string, patch: Pick<Resident, 'state' | 'currentDestination'>): void {
+    this.residents = this.residents.map((resident) => resident.id === id ? { ...resident, ...patch } : resident);
+  }
+
+  public summary(): PopulationSummary {
+    const states = (state: ResidentState): number => this.residents.filter((resident) => resident.state === state).length;
+    return {
+      absoluteMinutes: this.currentMinute,
+      atHome: states(ResidentState.AtHome),
+      requestingRoute: states(ResidentState.RequestingRoute),
+      traveling: states(ResidentState.Traveling),
+      atDestination: states(ResidentState.AtDestination),
+      activeRequests: this.requests.filter((request) => request.status === 'unresolved' || request.status === 'inTransit').length,
+      returnTripsPending: this.requests.filter((request) => request.purpose === 'return' && (request.status === 'unresolved' || request.status === 'inTransit')).length,
+      servedTrips: this.servedTrips,
+      unservedTrips: this.unservedTrips,
+    };
+  }
 }
