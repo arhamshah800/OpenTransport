@@ -1,0 +1,25 @@
+import type { Building, Coordinate, LevelDefinition, Road } from '../world/types';
+
+const point = (latitude: number, longitude: number): Coordinate => ({ latitude, longitude });
+const ORIGIN = { latitude: 41.875, longitude: -87.64 };
+const verticalRoads: Road[] = Array.from({ length: 6 }, (_, index) => ({ id: `road-ns-${index + 1}`, name: ['Harbor Avenue', 'Market Street', 'Central Boulevard', 'Union Avenue', 'Parkway Drive', 'Eastgate Road'][index], classification: index === 2 ? 'arterial' : 'local', speedKph: index === 2 ? 50 : 30, geometry: [point(41.868, ORIGIN.longitude + index * 0.004), point(41.882, ORIGIN.longitude + index * 0.004)] }));
+const horizontalRoads: Road[] = Array.from({ length: 6 }, (_, index) => ({ id: `road-ew-${index + 1}`, name: ['River Road', 'Foundry Lane', 'Library Street', 'Civic Way', 'North Market Road', 'Hillside Avenue'][index], classification: index === 3 ? 'arterial' : 'local', speedKph: index === 3 ? 45 : 30, geometry: [point(41.869 + index * 0.0024, -87.642), point(41.869 + index * 0.0024, -87.616)] }));
+const connectors: Road[] = Array.from({ length: 12 }, (_, index) => ({ id: `road-connector-${index + 1}`, classification: index < 2 ? 'highway' : 'arterial', name: index === 0 ? 'West Loop Expressway' : index === 1 ? 'East Loop Expressway' : undefined, speedKph: index < 2 ? 80 : 45, geometry: [point(41.869 + (index % 6) * 0.0024, -87.642), point(41.869 + ((index + 2) % 6) * 0.0024, -87.616)] }));
+const bridgeRoads: Road[] = Array.from({ length: 4 }, (_, index) => ({ id: `road-bridge-${index + 1}`, name: index === 1 ? 'Founders Bridge' : undefined, classification: 'arterial', speedKph: 40, geometry: [point(41.869 + index * 0.003, -87.632), point(41.869 + index * 0.003, -87.626)] }));
+const buildings: Building[] = Array.from({ length: 48 }, (_, index) => {
+  const row = Math.floor(index / 8); const column = index % 8; const latitude = 41.8694 + row * 0.0021; const longitude = -87.641 + column * 0.0029;
+  return { id: `building-${String(index + 1).padStart(2, '0')}`, footprint: [point(latitude, longitude), point(latitude, longitude + 0.0013), point(latitude + 0.001, longitude + 0.0013), point(latitude + 0.001, longitude)], acquisitionValue: 180_000 + index * 12_500, category: row < 3 ? 'residential' : 'mixed-use', displayName: row === 4 && column === 3 ? 'Civic Center' : undefined };
+});
+const buildingCoordinate = (index: number): Coordinate => buildings[index].footprint[0];
+
+export const testCity: LevelDefinition = {
+  metadata: { id: 'test-city', name: 'Port Junction', description: 'A compact fictional river city with Harbor and North Market districts.', version: 1, approximatePopulation: 12_400 },
+  bounds: { southWest: point(41.868, -87.643), northEast: point(41.883, -87.615) },
+  roads: [...verticalRoads, ...horizontalRoads, ...connectors, ...bridgeRoads], buildings,
+  population: Array.from({ length: 12 }, (_, index) => ({ id: `residents-${index + 1}`, coordinate: buildingCoordinate(index * 3), buildingId: buildings[index * 3].id, residents: 180 + index * 45 })),
+  workplaces: Array.from({ length: 9 }, (_, index) => ({ id: `workplace-${index + 1}`, coordinate: buildingCoordinate(24 + index * 2), buildingId: buildings[24 + index * 2].id, jobs: 120 + index * 70, displayName: ['Harbor Works', 'City Hall', 'Market Exchange', 'Union Hospital', 'Junction University', 'Riverside Mall', 'North Foundry', 'Library Offices', 'Eastgate Labs'][index] })),
+  pointsOfInterest: [{ id: 'poi-university', category: 'university', coordinate: buildingCoordinate(32), buildingId: buildings[32].id, displayName: 'Junction University', attractionWeight: 80 }, { id: 'poi-hospital', category: 'hospital', coordinate: buildingCoordinate(30), buildingId: buildings[30].id, displayName: 'Union Hospital', attractionWeight: 70 }, { id: 'poi-market', category: 'shopping', coordinate: buildingCoordinate(27), buildingId: buildings[27].id, displayName: 'North Market', attractionWeight: 60 }, { id: 'poi-stadium', category: 'entertainment', coordinate: buildingCoordinate(39), buildingId: buildings[39].id, displayName: 'Port Junction Arena', attractionWeight: 90 }, { id: 'poi-library', category: 'government', coordinate: buildingCoordinate(35), buildingId: buildings[35].id, displayName: 'Civic Library', attractionWeight: 40 }, { id: 'poi-terminal', category: 'landmark', coordinate: buildingCoordinate(4), buildingId: buildings[4].id, displayName: 'Old Ferry Terminal', attractionWeight: 45 }],
+  waterways: [{ id: 'junction-river', kind: 'river', geometry: [point(41.868, -87.631), point(41.872, -87.630), point(41.876, -87.629), point(41.883, -87.628)] }],
+  landmarks: [{ id: 'landmark-terminal', name: 'Old Ferry Terminal', coordinate: buildingCoordinate(4), buildingId: buildings[4].id }, { id: 'landmark-hall', name: 'Port Junction City Hall', coordinate: buildingCoordinate(35), buildingId: buildings[35].id }],
+  economy: { startingBudget: 25_000_000, currency: 'USD' }, construction: { roadRightOfWayCostPerMeter: 5_000, undergroundCostMultiplier: 2.5 },
+};
