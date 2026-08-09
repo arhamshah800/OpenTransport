@@ -1,6 +1,8 @@
 import type { Coordinate } from '../world';
+import type { ModeId } from '../modes';
 
-export type TransitMode = 'BUS' | 'TRAM' | 'SUBWAY';
+/** Backwards-compatible transit name for a registry-owned, serializable mode ID. */
+export type TransitMode = ModeId;
 export type TransitNodeKind = 'stop' | 'station';
 export interface TransitStop { readonly id: string; readonly name: string; readonly coordinate: Coordinate; readonly kind: TransitNodeKind; readonly supportedModes: readonly TransitMode[]; readonly parentComplexId?: string; readonly infrastructure?: { readonly platformCount?: number; readonly accessibility?: 'unknown' | 'accessible' }; }
 export interface TransitTransferComplex { readonly id: string; readonly name: string; readonly stopIds: readonly string[]; }

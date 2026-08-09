@@ -1,13 +1,13 @@
 import type { Coordinate } from '../world';
-import type { TransitMode } from '../transit';
+import type { ModeId } from '../modes';
 
 /** Elevations are meters relative to street level: surface is 0 and underground values are negative. */
 export interface VerticalProfile { readonly startElevationMeters: number; readonly endElevationMeters: number; }
-export interface EngineeringSegment { readonly id: string; readonly mode: TransitMode; readonly geometry: readonly Coordinate[]; readonly verticalProfile?: VerticalProfile; }
+export interface EngineeringSegment { readonly id: string; readonly mode: ModeId; readonly geometry: readonly Coordinate[]; readonly verticalProfile?: VerticalProfile; }
 export interface StationFootprint { readonly center: Coordinate; readonly widthMeters: number; readonly lengthMeters: number; readonly rotationDegrees?: number; }
 export type ConstructionProposal =
   | { readonly kind: 'station'; readonly id: string; readonly mode: 'SUBWAY'; readonly footprint: StationFootprint; readonly elevationMeters: number; }
-  | { readonly kind: 'alignment'; readonly id: string; readonly mode: TransitMode; readonly geometry: readonly Coordinate[]; readonly verticalProfile?: VerticalProfile; };
+  | { readonly kind: 'alignment'; readonly id: string; readonly mode: ModeId; readonly geometry: readonly Coordinate[]; readonly verticalProfile?: VerticalProfile; };
 export interface DemolitionImpact { readonly buildingId: string; readonly cost: number; }
 export interface ConstructionIssue { readonly code: 'INVALID_GEOMETRY' | 'EXCESSIVE_GRADE' | 'INSUFFICIENT_TUNNEL_CLEARANCE' | 'INSUFFICIENT_RIVER_DEPTH' | 'BUS_OFF_ROAD'; readonly message: string; readonly severity: 'error' | 'warning'; }
 export interface CostBreakdown { readonly baseInfrastructure: number; readonly depthSurcharge: number; readonly riverEngineering: number; readonly demolition: number; readonly total: number; }

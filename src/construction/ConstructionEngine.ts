@@ -2,6 +2,7 @@ import { distanceMeters, nearestPointOnPolyline, pointInPolygon, segmentsInterse
 import type { World, Coordinate } from '../world';
 import type { EngineeringConfiguration, ConstructionEvaluation, ConstructionIssue, ConstructionProposal, ConstructionState, EngineeringSegment, ConstructionEstimate, StationFootprint } from './types';
 import { defaultEngineeringConfiguration } from './config';
+import { modeRegistry } from '../modes';
 
 const emptyState = (): ConstructionState => ({ demolishedBuildingIds: [], engineeringSegments: [], stations: [] });
 const polylineLength = (line: readonly Coordinate[]): number => line.slice(1).reduce((total, point, index) => total + distanceMeters(line[index], point), 0);
@@ -17,7 +18,7 @@ const linesIntersect = (first: readonly Coordinate[], second: readonly Coordinat
 export class ConstructionEngine {
   public constructor(private readonly world: World, private readonly configuration: EngineeringConfiguration = defaultEngineeringConfiguration) {}
   public evaluate(proposal: ConstructionProposal, state: ConstructionState = emptyState()): ConstructionEvaluation {
-    const issues: ConstructionIssue[] = []; const geometry = proposal.kind === 'alignment' ? proposal.geometry : asPolygon(proposal.footprint);
+    const issues: ConstructionIssue[] = []; if (proposal.kind === 'alignment') modeRegistry.getModeDefinition(proposal.mode); const geometry = proposal.kind === 'alignment' ? proposal.geometry : asPolygon(proposal.footprint);
     const length = proposal.kind === 'alignment' ? polylineLength(geometry) : 0;
     if (proposal.kind === 'alignment' && geometry.length < 2) issues.push({ code: 'INVALID_GEOMETRY', severity: 'error', message: 'An alignment needs at least two coordinates.' });
     const demolitions = proposal.kind === 'station' ? this.world.definition.buildings.filter((building) => !state.demolishedBuildingIds.includes(building.id) && polygonsIntersect(geometry, building.footprint)).map((building) => ({ buildingId: building.id, cost: building.acquisitionValue })) : [];
