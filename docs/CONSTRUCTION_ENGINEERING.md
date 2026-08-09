@@ -8,4 +8,4 @@ Subway stations use rectangular footprints. Intersecting level building footprin
 
 Bus alignments must remain close to existing roads and have no guideway cost. Tram alignments represent dedicated right-of-way and cost per meter. Subway alignments include a vertical profile and depth costs. All prototype constants are in `src/construction/config.ts` and are balancing values, not real construction estimates.
 
-The development panel uses the last point clicked on the map to preview and commit station or alignment plans. It intentionally bypasses money handling until the Economy module provides a transaction boundary.
+The development panel uses the last point clicked on the map to preview and commit station or alignment plans. Economy records the construction estimate at the central simulation timestamp before the construction state is committed.
