@@ -20,6 +20,7 @@ import { LocalMapFallback } from './LocalMapFallback';
 import { DataPanel, DeveloperPanel, InspectorPanel, ModeSummary, SettingsPanel } from './ToolPanels';
 import { ConstructionMapOverlay } from './ConstructionMapOverlay';
 import { GuidewayWorkspace } from './GuidewayWorkspace';
+import 'maplibre-gl/dist/maplibre-gl.css';
 
 const initialVisibility: MapLayerVisibility = { population: 'points', workplaces: true, buildings: true, pois: true, water: true, tripDemand: false, unservedDemand: false, roadIds: false, buildingIds: false, bounds: false };
 const compactMoney = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 });

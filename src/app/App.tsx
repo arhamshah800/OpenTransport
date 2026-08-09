@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { levelRegistry } from '../levels/manifest';
 import type { World } from '../world';
-import { MapView } from '../map';
 import { LocalProfileRepository, LocalStorageSaveRepository, type GameSave, type PlayerProfile } from '../game';
+
+const MapView = lazy(() => import('../map/MapView').then((module) => ({ default: module.MapView })));
 
 const saves = new LocalStorageSaveRepository();
 const profiles = new LocalProfileRepository();
@@ -57,12 +58,14 @@ export function App() {
 
   if (world) {
     return (
-      <MapView
-        world={world}
-        player={player}
-        initialSave={save}
-        onBack={() => { setWorld(null); setSave(undefined); void saves.hasSave(world.definition.metadata.id).then((has) => setContinueIds((current) => { const next = new Set(current); if (has) next.add(world.definition.metadata.id); else next.delete(world.definition.metadata.id); return next; })); }}
-      />
+      <Suspense fallback={<main className="app-shell"><p className="intro">Loading city map…</p></main>}>
+        <MapView
+          world={world}
+          player={player}
+          initialSave={save}
+          onBack={() => { setWorld(null); setSave(undefined); void saves.hasSave(world.definition.metadata.id).then((has) => setContinueIds((current) => { const next = new Set(current); if (has) next.add(world.definition.metadata.id); else next.delete(world.definition.metadata.id); return next; })); }}
+        />
+      </Suspense>
     );
   }
 
