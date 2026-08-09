@@ -1,0 +1,14 @@
+import { describe, expect, it } from 'vitest';
+import { levelRegistry } from '../levels/manifest';
+import { testCity } from '../levels/test-city';
+import { aggregateRequestsByEndpoint, generateResidents, PopulationSimulation, ResidentState } from './index';
+import { World } from '../world';
+
+const loadWorld = () => levelRegistry.loadLevel('test-city');
+describe('Population & Trip Simulation', () => {
+  it('generates identical resident assignments and schedules from the same seed', async () => { const world = await loadWorld(); expect(generateResidents(world, { seed: 12345, targetAgentCount: 80 })).toEqual(generateResidents(world, { seed: 12345, targetAgentCount: 80 })); });
+  it('changes schedules when the seed changes', async () => { const world = await loadWorld(); const first = generateResidents(world, { seed: 1, targetAgentCount: 60 }).map((resident) => resident.outboundDepartureMinute); const second = generateResidents(world, { seed: 2, targetAgentCount: 60 }).map((resident) => resident.outboundDepartureMinute); expect(first).not.toEqual(second); });
+  it('represents the level population through simulation weights and plausibly weighted jobs', async () => { const world = await loadWorld(); const residents = generateResidents(world, { seed: 12345, targetAgentCount: 120 }); expect(residents.reduce((total, resident) => total + resident.simulationWeight, 0)).toBeCloseTo(testCity.population.reduce((total, record) => total + record.residents, 0), 5); expect(new Set(residents.map((resident) => resident.outboundDepartureMinute)).size).toBeGreaterThan(10); expect(residents.filter((resident) => resident.workplaceId).length).toBeGreaterThan(80); });
+  it('emits outbound and return requests without pretending transit exists', async () => { const world = await loadWorld(); const simulation = new PopulationSimulation(world, { seed: 12345, targetAgentCount: 80 }); simulation.tick({ absoluteMinutes: 9 * 60 + 30 }); expect(simulation.getTravelRequests().some((request) => request.purpose === 'work' && request.status === 'unresolved')).toBe(true); expect(simulation.summary().requestingRoute).toBeGreaterThan(0); simulation.resolveAllWithAlternativeMode(); expect(simulation.getResidents().some((resident) => resident.state === ResidentState.AtDestination)).toBe(true); simulation.tick({ absoluteMinutes: 19 * 60 }); expect(simulation.getTravelRequests().some((request) => request.purpose === 'return' && request.status === 'unresolved')).toBe(true); expect(aggregateRequestsByEndpoint(simulation.getTravelRequests(), 'origin').length).toBeGreaterThan(0); });
+  it('rejects invalid aggregated population data', () => { const invalid = new World({ ...testCity, population: [{ ...testCity.population[0], residents: -1 }] }); expect(() => generateResidents(invalid, { seed: 1 })).toThrow(/nonnegative weights/); });
+});
