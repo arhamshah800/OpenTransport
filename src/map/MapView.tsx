@@ -85,6 +85,7 @@ export function MapView({ world, onBack, player, initialSave }: { readonly world
   const [mapStatus, setMapStatus] = useState<MapLifecycleStatus>('LOADING');
   const [mapError, setMapError] = useState<string>();
   const [diagnostic, setDiagnostic] = useState<MapDiagnostic>();
+  const mapStatusRef = useRef<MapLifecycleStatus>('LOADING');
   const [activeTool, setActiveTool] = useState<GameplayTool>('select');
   const activeToolRef = useRef<GameplayTool>('select');
   const [activePanel, setActivePanel] = useState<ContextPanel>('inspector');
@@ -101,11 +102,12 @@ export function MapView({ world, onBack, player, initialSave }: { readonly world
   const networkRef = useRef(network);
   useEffect(() => { networkRef.current = network; }, [network]);
   const mapReady = mapStatus === 'READY';
+  useEffect(() => { mapStatusRef.current = mapStatus; }, [mapStatus]);
 
   const lastPlacementAt = useRef(0);
   const lastPlacementKey = useRef('');
   const placeCoordinate = useCallback((next: { readonly latitude: number; readonly longitude: number }, source: 'maplibre' | 'canvas' = 'canvas'): void => {
-    if (source === 'canvas' && mapStatus === 'READY') return;
+    if (source === 'canvas' && mapStatusRef.current === 'READY') return;
     const now = performance.now();
     const key = `${activeToolRef.current}:${next.latitude.toFixed(4)},${next.longitude.toFixed(4)}`;
     if (key === lastPlacementKey.current && now - lastPlacementAt.current < 700) return;
@@ -113,7 +115,7 @@ export function MapView({ world, onBack, player, initialSave }: { readonly world
     lastPlacementAt.current = now;
     setCoordinate(next);
     setClickVersion((value) => value + 1);
-  }, [mapStatus]);
+  }, []);
 
   const applyNetwork = useCallback((next: TransitNetwork): void => {
     setNetwork(next);
@@ -341,11 +343,11 @@ export function MapView({ world, onBack, player, initialSave }: { readonly world
     if (exit) onBack();
   };
 
-  const onConstructionOverlayChange = (overlay: ConstructionOverlayState): void => {
+  const onConstructionOverlayChange = useCallback((overlay: ConstructionOverlayState): void => {
     setConstructionOverlay(overlay);
     session.setConstruction(overlay.state);
     controller.current?.setConstructionOverlay?.(overlay);
-  };
+  }, [session]);
 
   const onConstructionEconomyChange = (): void => {
     refreshEconomy();
