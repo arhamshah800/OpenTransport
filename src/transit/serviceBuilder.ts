@@ -40,9 +40,12 @@ export function busStopValidator(world: World, maxDistanceMeters = defaultEngine
   return {
     validateProposal(proposal) {
       if (proposal.kind !== 'stop' || !proposal.modes.includes('BUS')) return { valid: true, reasons: [] };
-      return snapToRoad(world, proposal.coordinate, maxDistanceMeters)
-        ? { valid: true, reasons: [] }
-        : { valid: false, reasons: ['Bus stop must be placed near a road.'] };
+      const snap = snapToRoad(world, proposal.coordinate, maxDistanceMeters);
+      if (!snap) return { valid: false, reasons: ['Bus stop must be placed near a road.'] };
+      const road = world.roadsById.get(snap.roadId);
+      return road?.busStopEligible === false || road?.classification === 'highway'
+        ? { valid: false, reasons: ['Bus stops cannot be placed on highway mainlines. Use a surface or frontage road.'] }
+        : { valid: true, reasons: [] };
     },
   };
 }
@@ -58,7 +61,9 @@ export function routeBusSegments(world: World, stops: readonly TransitStop[], ma
 }
 
 export function snapBusStopCoordinate(world: World, coordinate: Coordinate, maxSnapMeters = defaultEngineeringConfiguration.busRoadSnapToleranceMeters): Coordinate | null {
-  return snapToRoad(world, coordinate, maxSnapMeters)?.coordinate ?? null;
+  const snap = snapToRoad(world, coordinate, maxSnapMeters);
+  const road = snap ? world.roadsById.get(snap.roadId) : undefined;
+  return snap && road?.busStopEligible !== false && road?.classification !== 'highway' ? snap.coordinate : null;
 }
 
 function guidewaySegments(state: ConstructionState, mode: TransitMode): readonly { readonly id: string; readonly geometry: readonly Coordinate[] }[] {

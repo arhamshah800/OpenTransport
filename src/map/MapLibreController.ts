@@ -9,7 +9,7 @@ const sourceId = (name: string): string => `open-transport-${name}`;
 const layerId = (name: string): string => `open-transport-${name}`;
 const baseVisibility: MapLayerVisibility = { population: 'points', workplaces: true, buildings: true, pois: true, water: true, tripDemand: false, unservedDemand: false, roadIds: false, buildingIds: false, bounds: false };
 
-const requiredLayerNames = ['water', 'buildings', 'building-outline', 'highways', 'arterials', 'roads', 'population-points', 'workplaces', 'pois'] as const;
+const requiredLayerNames = ['water-fill', 'water', 'buildings', 'building-outline', 'highways', 'arterials', 'roads', 'population-points', 'workplaces', 'pois'] as const;
 const requiredSourceNames = ['roads', 'buildings', 'water', 'population', 'workplaces', 'pois', 'bounds'] as const;
 export interface MapLibreControllerOptions { readonly container: HTMLElement; readonly world: World; readonly onSelection: (selection: MapSelection) => boolean | void; readonly onCoordinate: (coordinate: { readonly latitude: number; readonly longitude: number }) => void; readonly onLifecycle: (status: MapLifecycleStatus, message?: string, diagnostic?: MapDiagnostic) => void; }
 
@@ -35,7 +35,7 @@ export class MapLibreController implements MapController {
     this.world = options.world;
     this.map = new maplibregl.Map({
       container: options.container,
-      style: { version: 8, sources: {}, layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#0d111a' } }] },
+      style: { version: 8, sources: {}, layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#dce7ef' } }] },
       center: [0, 0],
       zoom: 10,
       pitch: 45,
@@ -68,22 +68,23 @@ export class MapLibreController implements MapController {
     this.map.addSource(sourceId('construction-demolitions'), { type: 'geojson', data: construction['construction-demolitions'] });
     this.map.addSource(sourceId('construction-alignments'), { type: 'geojson', data: construction['construction-alignments'] });
     this.map.addSource(sourceId('construction-stations'), { type: 'geojson', data: construction['construction-stations'] });
-    this.map.addLayer({ id: layerId('water'), type: 'line', source: sourceId('water'), paint: { 'line-color': '#162233', 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 7, 15, 15], 'line-opacity': 0.82 } });
+    this.map.addLayer({ id: layerId('water-fill'), type: 'fill', source: sourceId('water'), filter: ['==', '$type', 'Polygon'], paint: { 'fill-color': '#79bce6', 'fill-opacity': 0.7 } });
+    this.map.addLayer({ id: layerId('water'), type: 'line', source: sourceId('water'), paint: { 'line-color': '#3d84b8', 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 3, 15, 9], 'line-opacity': 0.9 } });
     this.map.addLayer({
       id: layerId('buildings'),
       type: 'fill-extrusion',
       source: sourceId('buildings'),
       paint: {
-        'fill-extrusion-color': ['case', ['boolean', ['feature-state', 'selected'], false], '#f0a23e', '#1c2433'],
+        'fill-extrusion-color': ['case', ['boolean', ['feature-state', 'selected'], false], '#f0a23e', '#b9c6d2'],
         'fill-extrusion-height': ['interpolate', ['linear'], ['coalesce', ['get', 'acquisitionValue'], 150000], 100000, 10, 10000000, 150],
         'fill-extrusion-base': 0,
-        'fill-extrusion-opacity': 0.85
+        'fill-extrusion-opacity': 0.7
       }
     });
-    this.map.addLayer({ id: layerId('building-outline'), type: 'line', source: sourceId('buildings'), paint: { 'line-color': '#1c2433', 'line-opacity': 0 } });
-    this.map.addLayer({ id: layerId('highways'), type: 'line', source: sourceId('roads'), filter: ['==', ['get', 'classification'], 'highway'], paint: { 'line-color': '#3d4e70', 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 3, 15, 8] } });
-    this.map.addLayer({ id: layerId('arterials'), type: 'line', source: sourceId('roads'), filter: ['==', ['get', 'classification'], 'arterial'], paint: { 'line-color': '#253247', 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 2.5, 15, 5] } });
-    this.map.addLayer({ id: layerId('roads'), type: 'line', source: sourceId('roads'), filter: ['==', ['get', 'classification'], 'local'], paint: { 'line-color': '#18202d', 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 1.25, 15, 2.5] } });
+    this.map.addLayer({ id: layerId('building-outline'), type: 'line', source: sourceId('buildings'), paint: { 'line-color': '#8798a7', 'line-opacity': 0.45 } });
+    this.map.addLayer({ id: layerId('highways'), type: 'line', source: sourceId('roads'), filter: ['==', ['get', 'classification'], 'highway'], paint: { 'line-color': '#315f91', 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 3, 15, 8] } });
+    this.map.addLayer({ id: layerId('arterials'), type: 'line', source: sourceId('roads'), filter: ['==', ['get', 'classification'], 'arterial'], paint: { 'line-color': '#d18a32', 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 2.5, 15, 5] } });
+    this.map.addLayer({ id: layerId('roads'), type: 'line', source: sourceId('roads'), filter: ['==', ['get', 'classification'], 'local'], paint: { 'line-color': '#f8fbfd', 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 1.1, 15, 2.4] } });
     this.map.addLayer({ id: layerId('population-density'), type: 'circle', source: sourceId('population'), paint: { 'circle-color': '#ef6c45', 'circle-opacity': .12, 'circle-radius': ['interpolate', ['linear'], ['get', 'residents'], 0, 7, 800, 28] } });
     this.map.addLayer({ id: layerId('population-points'), type: 'circle', source: sourceId('population'), paint: { 'circle-color': '#ef6c45', 'circle-opacity': .9, 'circle-radius': 4, 'circle-stroke-width': 1, 'circle-stroke-color': '#0d111a' } });
     this.map.addLayer({ id: layerId('workplaces'), type: 'circle', source: sourceId('workplaces'), paint: { 'circle-color': '#3b82f6', 'circle-radius': ['interpolate', ['linear'], ['get', 'jobs'], 0, 4, 800, 16], 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1.5 } });

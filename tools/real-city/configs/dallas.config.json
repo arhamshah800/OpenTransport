@@ -1,0 +1,53 @@
+{
+  "cityId": "dallas",
+  "displayName": "Dallas",
+  "description": "Build a new transit network across the Dallas side of the Metroplex, from DFW Airport and Love Field through Downtown, Plano, Frisco, Garland, Mesquite, DeSoto, and the Trinity River corridor.",
+  "levelVersion": 1,
+  "bounds": { "southWest": { "latitude": 32.58, "longitude": -97.12 }, "northEast": { "latitude": 33.24, "longitude": -96.42 } },
+  "includedCounties": ["Dallas", "Collin", "Denton", "Tarrant (DFW Airport edge)", "Rockwall"],
+  "sources": {
+    "roads": "data/raw/dallas/roads.geojson",
+    "waterways": "data/raw/dallas/waterways.geojson",
+    "buildings": "data/raw/dallas/buildings.geojson",
+    "population": "data/raw/dallas/population.geojson",
+    "workplaces": "data/raw/dallas/workplaces.geojson",
+    "pois": "data/raw/dallas/pois.geojson"
+  },
+  "sourceMetadata": {
+    "roads": "TxDOT Roadways and City of Dallas Area Roads public ArcGIS Feature Services",
+    "population": "Esri USA Census Tracts, 2020 Census population attributes",
+    "waterways": "Esri USA Detailed Water Bodies and USA Rivers and Streams (USGS NHD-derived)",
+    "buildings": "Public Dallas building footprint ArcGIS Feature Service",
+    "workplaces": "Public Dallas Employers ArcGIS Feature Service; not LEHD/LODES",
+    "licenseNotes": "Verify each hosted service's current terms before publishing a redistributed source extract. Generated gameplay data is derived and simplified."
+  },
+  "roadRules": { "includeHighwayValues": ["motorway", "trunk", "primary", "secondary", "tertiary", "residential", "service"], "highwayValues": ["motorway", "trunk"], "serviceIsStopEligible": true, "simplifyEveryNthCoordinate": 4, "maxHighways": 900, "maxArterials": 1500, "maxLocals": 1100 },
+  "buildingRules": { "minimumAreaSquareMeters": 120, "simplifyEveryNthCoordinate": 3, "maxFeatures": 1800 },
+  "populationRules": { "populationProperty": "population", "targetRepresentativeResidents": 12000 },
+  "workplaceRules": { "jobsProperty": "jobs", "maxClusters": 500 },
+  "poiRules": { "categories": ["airport", "university", "hospital", "stadium", "park", "shopping", "landmark", "district"] },
+  "economy": { "startingBudget": 100000000, "currency": "USD" },
+  "manualOverrides": {
+    "pois": [
+      { "id": "dfw-airport", "name": "DFW International Airport", "category": "airport", "latitude": 32.8998, "longitude": -97.0403, "weight": 100 },
+      { "id": "love-field", "name": "Dallas Love Field", "category": "airport", "latitude": 32.8471, "longitude": -96.8518, "weight": 85 },
+      { "id": "downtown", "name": "Downtown Dallas", "category": "district", "latitude": 32.7767, "longitude": -96.7970, "weight": 95 },
+      { "id": "uptown", "name": "Uptown Dallas", "category": "district", "latitude": 32.7945, "longitude": -96.8043, "weight": 80 },
+      { "id": "white-rock-lake", "name": "White Rock Lake", "category": "park", "latitude": 32.8475, "longitude": -96.7185, "weight": 55 },
+      { "id": "plano-legacy", "name": "Plano Legacy", "category": "district", "latitude": 33.0780, "longitude": -96.8200, "weight": 75 },
+      { "id": "frisco", "name": "Frisco / US-380 Growth Edge", "category": "district", "latitude": 33.1507, "longitude": -96.8236, "weight": 65 },
+      { "id": "garland", "name": "Garland", "category": "district", "latitude": 32.9126, "longitude": -96.6389, "weight": 55 },
+      { "id": "mesquite", "name": "Mesquite", "category": "district", "latitude": 32.7668, "longitude": -96.5992, "weight": 50 },
+      { "id": "desoto", "name": "DeSoto", "category": "district", "latitude": 32.5899, "longitude": -96.8570, "weight": 45 },
+      { "id": "richardson", "name": "Richardson Telecom Corridor", "category": "district", "latitude": 32.9483, "longitude": -96.7299, "weight": 70 }
+    ],
+    "workplaces": [
+      { "id": "downtown-jobs", "name": "Downtown Dallas", "latitude": 32.7767, "longitude": -96.7970, "jobs": 950 },
+      { "id": "dfw-jobs", "name": "DFW Airport", "latitude": 32.8998, "longitude": -97.0403, "jobs": 850 },
+      { "id": "legacy-jobs", "name": "Plano Legacy", "latitude": 33.0780, "longitude": -96.8200, "jobs": 700 },
+      { "id": "medical-jobs", "name": "Medical District", "latitude": 32.8090, "longitude": -96.8430, "jobs": 650 }
+    ],
+    "stationProhibitedWaterNames": ["Trinity River", "White Rock Lake"]
+  },
+  "output": "src/levels/generated/dallas.ts"
+}

@@ -1,5 +1,6 @@
 import { createLevelRegistry } from '../world/registry';
 import { bostonDowntown } from './boston-downtown';
+import { dallas } from './generated/dallas';
 import { miniCity } from './mini-city';
 import { testCity } from './test-city';
 
@@ -16,6 +17,7 @@ const entry = (level: any) => ({
 
 export const levelRegistry = createLevelRegistry([
   entry(bostonDowntown),
+  entry(dallas),
   entry(miniCity),
   entry(testCity)
 ]);

@@ -9,7 +9,7 @@ export type ConstructionProposal =
   | { readonly kind: 'station'; readonly id: string; readonly mode: 'SUBWAY'; readonly footprint: StationFootprint; readonly elevationMeters: number; }
   | { readonly kind: 'alignment'; readonly id: string; readonly mode: ModeId; readonly geometry: readonly Coordinate[]; readonly verticalProfile?: VerticalProfile; };
 export interface DemolitionImpact { readonly buildingId: string; readonly cost: number; }
-export interface ConstructionIssue { readonly code: 'INVALID_GEOMETRY' | 'EXCESSIVE_GRADE' | 'INSUFFICIENT_TUNNEL_CLEARANCE' | 'INSUFFICIENT_RIVER_DEPTH' | 'BUS_OFF_ROAD'; readonly message: string; readonly severity: 'error' | 'warning'; }
+export interface ConstructionIssue { readonly code: 'INVALID_GEOMETRY' | 'EXCESSIVE_GRADE' | 'INSUFFICIENT_TUNNEL_CLEARANCE' | 'INSUFFICIENT_RIVER_DEPTH' | 'BUS_OFF_ROAD' | 'STATION_IN_WATER'; readonly message: string; readonly severity: 'error' | 'warning'; }
 export interface CostBreakdown { readonly baseInfrastructure: number; readonly depthSurcharge: number; readonly riverEngineering: number; readonly demolition: number; readonly total: number; }
 export interface ConstructionEstimate { readonly demolitionImpacts: readonly DemolitionImpact[]; readonly riverCrossingIds: readonly string[]; readonly horizontalLengthMeters: number; readonly cost: CostBreakdown; }
 export interface ValidatedConstructionPlan { readonly proposal: ConstructionProposal; readonly estimate: ConstructionEstimate; readonly infrastructure: EngineeringSegment | StationFootprint; readonly demolishedBuildingIds: readonly string[]; }

@@ -21,6 +21,7 @@ export class ConstructionEngine {
     const issues: ConstructionIssue[] = []; if (proposal.kind === 'alignment') modeRegistry.getModeDefinition(proposal.mode); const geometry = proposal.kind === 'alignment' ? proposal.geometry : stationFootprintPolygon(proposal.footprint);
     const length = proposal.kind === 'alignment' ? polylineLength(geometry) : 0;
     if (proposal.kind === 'alignment' && geometry.length < 2) issues.push({ code: 'INVALID_GEOMETRY', severity: 'error', message: 'An alignment needs at least two coordinates.' });
+    if (proposal.kind === 'station' && this.world.definition.waterways.some((water) => water.stationProhibited && water.geometry.length >= 3 && polygonsIntersect(geometry, water.geometry))) issues.push({ code: 'STATION_IN_WATER', severity: 'error', message: 'Subway stations cannot be placed in water.' });
     const demolitions = proposal.kind === 'station' ? this.world.definition.buildings.filter((building) => !state.demolishedBuildingIds.includes(building.id) && polygonsIntersect(geometry, building.footprint)).map((building) => ({ buildingId: building.id, cost: building.acquisitionValue })) : [];
     const riverCrossingIds = proposal.kind === 'alignment' && proposal.mode === 'SUBWAY' ? this.world.definition.waterways.filter((water) => linesIntersect(geometry, water.geometry)).map((water) => water.id) : [];
     let depthSurcharge = 0; let riverEngineering = 0;
