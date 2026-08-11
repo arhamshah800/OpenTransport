@@ -18,11 +18,11 @@
     "population": "Esri USA Census Tracts, 2020 Census population attributes",
     "waterways": "Esri USA Detailed Water Bodies and USA Rivers and Streams (USGS NHD-derived)",
     "buildings": "Public Dallas building footprint ArcGIS Feature Service",
-    "workplaces": "Public Dallas Employers ArcGIS Feature Service; not LEHD/LODES",
+    "workplaces": "U.S. Census LEHD Origin-Destination Employment Statistics (LODES8) Texas WAC 2023, JT00 all jobs; block counts aggregated to Census tract workplace clusters",
     "licenseNotes": "Verify each hosted service's current terms before publishing a redistributed source extract. Generated gameplay data is derived and simplified."
   },
   "roadRules": { "includeHighwayValues": ["motorway", "trunk", "primary", "secondary", "tertiary", "residential", "service"], "highwayValues": ["motorway", "trunk"], "serviceIsStopEligible": true, "simplifyEveryNthCoordinate": 4, "maxHighways": 900, "maxArterials": 1500, "maxLocals": 1100 },
-  "buildingRules": { "minimumAreaSquareMeters": 120, "simplifyEveryNthCoordinate": 3, "maxFeatures": 1800 },
+  "buildingRules": { "minimumAreaSquareMeters": 120, "simplifyEveryNthCoordinate": 3, "maxFeatures": 9000 },
   "populationRules": { "populationProperty": "population", "targetRepresentativeResidents": 12000 },
   "workplaceRules": { "jobsProperty": "jobs", "maxClusters": 500 },
   "poiRules": { "categories": ["airport", "university", "hospital", "stadium", "park", "shopping", "landmark", "district"] },
@@ -41,12 +41,7 @@
       { "id": "desoto", "name": "DeSoto", "category": "district", "latitude": 32.5899, "longitude": -96.8570, "weight": 45 },
       { "id": "richardson", "name": "Richardson Telecom Corridor", "category": "district", "latitude": 32.9483, "longitude": -96.7299, "weight": 70 }
     ],
-    "workplaces": [
-      { "id": "downtown-jobs", "name": "Downtown Dallas", "latitude": 32.7767, "longitude": -96.7970, "jobs": 950 },
-      { "id": "dfw-jobs", "name": "DFW Airport", "latitude": 32.8998, "longitude": -97.0403, "jobs": 850 },
-      { "id": "legacy-jobs", "name": "Plano Legacy", "latitude": 33.0780, "longitude": -96.8200, "jobs": 700 },
-      { "id": "medical-jobs", "name": "Medical District", "latitude": 32.8090, "longitude": -96.8430, "jobs": 650 }
-    ],
+    "workplaces": [],
     "stationProhibitedWaterNames": ["Trinity River", "White Rock Lake"]
   },
   "output": "src/levels/generated/dallas.ts"

@@ -2,7 +2,8 @@ import type { Coordinate } from '../world';
 import type { ServiceFrequency } from '../modes';
 import type { JourneyLeg } from '../journey';
 
-export interface LineServiceConfiguration { readonly lineId: string; readonly active: boolean; readonly vehicleTypeId: string; readonly assignedVehicleCount: number; readonly frequency: ServiceFrequency; readonly customFareCents?: number; }
+export interface ServiceDisruption { readonly kind: 'construction' | 'signal' | 'vehicle'; readonly untilSeconds: number; }
+export interface LineServiceConfiguration { readonly lineId: string; readonly active: boolean; readonly vehicleTypeId: string; readonly assignedVehicleCount: number; readonly frequency: ServiceFrequency; readonly customFareCents?: number; readonly disruption?: ServiceDisruption; }
 
 /** Runtime passenger waiting at a stop or riding a vehicle for the current leg. */
 export interface WaitingPassenger {
@@ -14,7 +15,7 @@ export interface WaitingPassenger {
   readonly farePaid: boolean;
 }
 
-export interface VehicleRuntime { readonly id: string; readonly lineId: string; readonly vehicleTypeId: string; readonly state: 'DWELLING' | 'TRAVELING'; readonly stopIndex: number; /** 1 = outbound toward last stop, -1 = inbound toward first. */ readonly direction: 1 | -1; readonly segmentProgressMeters: number; readonly dwellRemainingSeconds: number; readonly passengers: readonly WaitingPassenger[]; readonly coordinate: Coordinate; }
+export interface VehicleRuntime { readonly id: string; readonly lineId: string; readonly vehicleTypeId: string; readonly state: 'DWELLING' | 'TRAVELING' | 'DELAYED'; readonly delayedFromState?: 'DWELLING' | 'TRAVELING'; readonly stopIndex: number; /** 1 = outbound toward last stop, -1 = inbound toward first. */ readonly direction: 1 | -1; readonly segmentProgressMeters: number; readonly dwellRemainingSeconds: number; readonly passengers: readonly WaitingPassenger[]; readonly coordinate: Coordinate; }
 export interface FareChargedEvent { readonly type: 'FARE_CHARGED'; readonly lineId: string; readonly vehicleId: string; readonly passengerId: string; readonly amountCents: number; readonly timestampSeconds: number; }
 export interface VehicleOperatingCostEvent { readonly type: 'VEHICLE_OPERATING_COST'; readonly lineId: string; readonly vehicleId: string; readonly amountCents: number; readonly timestampSeconds: number; }
 export type OperationsEvent = FareChargedEvent | VehicleOperatingCostEvent;

@@ -1,7 +1,7 @@
 {
   "cityId": "dallas",
   "pipeline": "tools/real-city/src/cli.mjs",
-  "processedAt": "2026-08-10",
+  "processedAt": "2026-08-11",
   "sources": {
     "roads": "data/raw/dallas/roads.geojson",
     "waterways": "data/raw/dallas/waterways.geojson",
@@ -15,10 +15,10 @@
     "population": "Esri USA Census Tracts, 2020 Census population attributes",
     "waterways": "Esri USA Detailed Water Bodies and USA Rivers and Streams (USGS NHD-derived)",
     "buildings": "Public Dallas building footprint ArcGIS Feature Service",
-    "workplaces": "Public Dallas Employers ArcGIS Feature Service; not LEHD/LODES",
+    "workplaces": "U.S. Census LEHD Origin-Destination Employment Statistics (LODES8) Texas WAC 2023, JT00 all jobs; block counts aggregated to Census tract workplace clusters",
     "licenseNotes": "Verify each hosted service's current terms before publishing a redistributed source extract. Generated gameplay data is derived and simplified."
   },
   "warnings": [
-    "Workplace clusters use a public employer directory in this generated build; replace with LODES WAC aggregation when a suitable extract is available."
+    "LODES WAC workplace counts are aggregated from Census blocks to tract-centroid gameplay clusters; they are not individual employer locations."
   ]
 }

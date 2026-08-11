@@ -77,6 +77,7 @@ export function FinancePanel({
           <dt>Net operations today</dt><dd>{money(summary.today.netOperatingCents)}</dd>
           <dt>Construction today</dt><dd>{money(summary.today.constructionSpendingCents)}</dd>
           <dt>Demolition today</dt><dd>{money(summary.today.demolitionSpendingCents)}</dd>
+          <dt>Fleet purchases today</dt><dd>{money(summary.today.vehiclePurchaseCents)}</dd>
         </dl>
       )}
 
@@ -96,6 +97,7 @@ export function FinancePanel({
           <dl className="finance-overview">
             <dt>Construction spending (all time)</dt><dd>{money(summary.allTime.constructionSpendingCents)}</dd>
             <dt>Demolition / acquisition (all time)</dt><dd>{money(summary.allTime.demolitionSpendingCents)}</dd>
+            <dt>Fleet purchases (all time)</dt><dd>{money(summary.allTime.vehiclePurchaseCents)}</dd>
             <dt>Cash available</dt><dd>{money(summary.cashCents)}</dd>
           </dl>
           <h3>Recent construction ledger</h3>

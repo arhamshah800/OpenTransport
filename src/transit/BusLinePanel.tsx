@@ -13,7 +13,7 @@ import type { SimulationEngine, SimulationSnapshot } from '../time';
 
 export function networkToOverlay(network: TransitNetwork, highlightLineId?: string): TransitOverlay {
   return {
-    lines: network.definition.lines.filter((line) => line.active || line.id === highlightLineId).flatMap((line) => line.segments.map((segment) => ({
+    lines: network.definition.lines.filter((line) => (line.visible !== false && line.active) || line.id === highlightLineId).flatMap((line) => line.segments.map((segment) => ({
       id: segment.id,
       geometry: segment.geometry,
       color: line.id === highlightLineId ? lineDisplayColor(line) : `${lineDisplayColor(line)}cc`,
@@ -22,7 +22,7 @@ export function networkToOverlay(network: TransitNetwork, highlightLineId?: stri
   };
 }
 
-export function BusLinePanel({ world, network, coordinate, clickVersion, hoverCoordinate, active, onNetwork, onOverlay, onSelectLine, selectedLineId, engine, snapshot, onSnapshot }: {
+export function BusLinePanel({ world, network, coordinate, clickVersion, hoverCoordinate, active, onNetwork, onOverlay, onSelectLine, selectedLineId, engine, snapshot, onSnapshot, onPurchaseVehicle }: {
   readonly world: World;
   readonly network: TransitNetwork;
   readonly coordinate: Coordinate | null;
@@ -36,6 +36,7 @@ export function BusLinePanel({ world, network, coordinate, clickVersion, hoverCo
   readonly engine: SimulationEngine;
   readonly snapshot: SimulationSnapshot;
   readonly onSnapshot: (snapshot: SimulationSnapshot) => void;
+  readonly onPurchaseVehicle?: (lineId: string, vehicleId: string, purchaseCost: number) => boolean;
 }) {
   const [drafting, setDrafting] = useState(false);
   const [draftStops, setDraftStops] = useState<TransitStop[]>([]);
@@ -59,8 +60,8 @@ export function BusLinePanel({ world, network, coordinate, clickVersion, hoverCo
       ],
       stops: [
         ...network.definition.stops.map((stop) => ({ id: stop.id, coordinate: stop.coordinate, name: stop.name })),
-        ...draftStops.map((stop) => ({ id: stop.id, coordinate: stop.coordinate, name: stop.name })),
-        ...(hoverSnap ? [{ id: 'draft-hover-stop', coordinate: hoverSnap, name: 'Next stop' }] : []),
+        ...draftStops.map((stop, index) => ({ id: stop.id, coordinate: stop.coordinate, name: stop.name, draftRole: index === 0 ? 'start' as const : index === draftStops.length - 1 ? 'end' as const : 'waypoint' as const })),
+        ...(hoverSnap ? [{ id: 'draft-hover-stop', coordinate: hoverSnap, name: 'Next stop', draftRole: 'hover' as const }] : []),
       ],
     });
   }, [active, draftStops, drafting, hoverCoordinate, network, onOverlay, selectedLineId, world]);
@@ -118,7 +119,7 @@ export function BusLinePanel({ world, network, coordinate, clickVersion, hoverCo
   };
 
   if (selectedLineId && network.getLine(selectedLineId)?.mode === 'BUS') {
-    return <LineEditor world={world} network={network} lineId={selectedLineId} mode="BUS" onNetwork={onNetwork} onClose={() => onSelectLine(null)} onMessage={setMessage} engine={engine} snapshot={snapshot} onSnapshot={onSnapshot} />;
+    return <LineEditor world={world} network={network} lineId={selectedLineId} mode="BUS" onNetwork={onNetwork} onClose={() => onSelectLine(null)} onMessage={setMessage} engine={engine} snapshot={snapshot} onSnapshot={onSnapshot} onPurchaseVehicle={onPurchaseVehicle} />;
   }
 
   return <section className="line-workflow" aria-label="Bus line builder">
@@ -130,6 +131,7 @@ export function BusLinePanel({ world, network, coordinate, clickVersion, hoverCo
     {drafting ? <>
       <label>Line name <input aria-label="Bus line name" value={lineName} onChange={(event) => setLineName(event.target.value)} /></label>
       <label>Daytime headway (min) <input aria-label="Bus headway" type="number" min={4} max={60} value={headway} onChange={(event) => setHeadway(Number(event.target.value))} /></label>
+      <p className="draft-handle-key"><i className="start" />Start <i className="waypoint" />Waypoint <i className="end" />Current end</p>
       <ol className="stop-order-list">{draftStops.map((stop) => <li key={stop.id}>{stop.name}</li>)}</ol>
       <div className="proposal-actions">
         <button type="button" className="secondary" onClick={cancelDraft}>Cancel</button>

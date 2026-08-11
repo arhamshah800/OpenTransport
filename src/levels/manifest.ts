@@ -1,21 +1,10 @@
 import { createLevelRegistry } from '../world/registry';
-import { bostonDowntown } from './boston-downtown';
-import { miniCity } from './mini-city';
-import { testCity } from './test-city';
-
-const entry = (level: any) => ({
-  summary: {
-    id: level.metadata.id,
-    name: level.metadata.name,
-    description: level.metadata.description,
-    approximatePopulation: level.metadata.approximatePopulation,
-    bounds: level.bounds
-  },
-  load: async () => level
-});
 
 export const levelRegistry = createLevelRegistry([
-  entry(bostonDowntown),
+  {
+    summary: { id: 'boston-downtown', name: 'Boston Downtown', description: 'A dense historic core with narrow streets and concentrated demand.', approximatePopulation: 684_000, bounds: { southWest: { latitude: 42.34, longitude: -71.12 }, northEast: { latitude: 42.39, longitude: -71.03 } } },
+    load: async () => (await import('./boston-downtown')).bostonDowntown,
+  },
   {
     summary: {
       id: 'dallas',
@@ -28,6 +17,12 @@ export const levelRegistry = createLevelRegistry([
     // visiting the city picker, pays the cost of parsing its static GIS-derived data.
     load: async () => (await import('./generated/dallas')).dallas,
   },
-  entry(miniCity),
-  entry(testCity)
+  {
+    summary: { id: 'mini-city', name: 'Havenport', description: 'A compact waterfront city that rewards clear connections.', approximatePopulation: 92_000, bounds: { southWest: { latitude: 37.75, longitude: -122.48 }, northEast: { latitude: 37.81, longitude: -122.40 } } },
+    load: async () => (await import('./mini-city')).miniCity,
+  },
+  {
+    summary: { id: 'test-city', name: 'Northgate', description: 'A dense fixture city for testing future network ideas.', approximatePopulation: 218_000, bounds: { southWest: { latitude: 41.84, longitude: -87.67 }, northEast: { latitude: 41.90, longitude: -87.60 } } },
+    load: async () => (await import('./test-city')).testCity,
+  },
 ]);

@@ -11,6 +11,14 @@ export const stationFootprintPolygon = (footprint: StationFootprint): Coordinate
   const halfLat = footprint.lengthMeters * latScale / 2; const halfLon = footprint.widthMeters * lonScale / 2;
   return [{ latitude: footprint.center.latitude - halfLat, longitude: footprint.center.longitude - halfLon }, { latitude: footprint.center.latitude - halfLat, longitude: footprint.center.longitude + halfLon }, { latitude: footprint.center.latitude + halfLat, longitude: footprint.center.longitude + halfLon }, { latitude: footprint.center.latitude + halfLat, longitude: footprint.center.longitude - halfLon }];
 };
+export const stationEntranceCoordinate = (footprint: StationFootprint, side: 'north' | 'east' | 'south' | 'west'): Coordinate => {
+  const latScale = 1 / 111_111; const lonScale = 1 / (111_111 * Math.cos(footprint.center.latitude * Math.PI / 180));
+  const clearanceMeters = 8;
+  if (side === 'north') return { latitude: footprint.center.latitude + (footprint.lengthMeters / 2 + clearanceMeters) * latScale, longitude: footprint.center.longitude };
+  if (side === 'south') return { latitude: footprint.center.latitude - (footprint.lengthMeters / 2 + clearanceMeters) * latScale, longitude: footprint.center.longitude };
+  if (side === 'east') return { latitude: footprint.center.latitude, longitude: footprint.center.longitude + (footprint.widthMeters / 2 + clearanceMeters) * lonScale };
+  return { latitude: footprint.center.latitude, longitude: footprint.center.longitude - (footprint.widthMeters / 2 + clearanceMeters) * lonScale };
+};
 const polygonsIntersect = (first: readonly Coordinate[], second: readonly Coordinate[]): boolean => first.some((point) => pointInPolygon(point, second)) || second.some((point) => pointInPolygon(point, first)) || first.some((a, index) => second.some((b, otherIndex) => segmentsIntersect(a, first[(index + 1) % first.length], b, second[(otherIndex + 1) % second.length])));
 const linesIntersect = (first: readonly Coordinate[], second: readonly Coordinate[]): boolean => first.slice(1).some((point, index) => second.slice(1).some((other, otherIndex) => segmentsIntersect(first[index], point, second[otherIndex], other)));
 

@@ -1,5 +1,6 @@
-export { ConstructionEngine, stationFootprintPolygon } from './ConstructionEngine';
+export { ConstructionEngine, stationFootprintPolygon, stationEntranceCoordinate } from './ConstructionEngine';
 export { ConstructionWorkflow } from './ConstructionWorkflow';
+export { activeConstructionStage, scheduleConstruction } from './schedule';
 export type { ConstructionCommitResult, ConstructionPreview, ConstructionWorkflowSnapshot } from './ConstructionWorkflow';
 export { ConstructionPanel } from './ConstructionPanel';
 export type { ConstructionOverlayState } from './ConstructionPanel';

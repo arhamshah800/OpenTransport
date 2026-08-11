@@ -13,7 +13,7 @@ export type MapSelection =
   | null;
 export interface TransitOverlay {
   readonly lines: readonly { readonly id: string; readonly geometry: readonly Coordinate[]; readonly color?: string }[];
-  readonly stops: readonly { readonly id: string; readonly coordinate: Coordinate; readonly name?: string }[];
+  readonly stops: readonly { readonly id: string; readonly coordinate: Coordinate; readonly name?: string; readonly draftRole?: 'start' | 'waypoint' | 'end' | 'hover' }[];
   readonly vehicles?: readonly {
     readonly id: string;
     readonly coordinate: Coordinate;
@@ -21,6 +21,7 @@ export interface TransitOverlay {
     readonly lineId?: string;
     readonly modeId?: string;
     readonly vehicleTypeId?: string;
+    readonly state?: 'DWELLING' | 'TRAVELING' | 'DELAYED';
   }[];
 }
 export interface MapLayerVisibility {
@@ -31,6 +32,7 @@ export interface MapLayerVisibility {
   readonly water: boolean;
   readonly tripDemand: boolean;
   readonly unservedDemand: boolean;
+  readonly acquisitionCosts: boolean;
   readonly roadIds: boolean;
   readonly buildingIds: boolean;
   readonly bounds: boolean;
@@ -51,6 +53,8 @@ export interface MapController {
   setConstructionOverlay?(overlay: import('../construction').ConstructionWorkflowSnapshot): void;
   coordinateFromScreen(x: number, y: number): Coordinate;
   resetCamera(): void;
+  focusCamera(target: Coordinate, zoom?: number, pitch?: number, bearing?: number): void;
+  panBy(x: number, y: number): void;
   setPitchAndBearing(pitch: number, bearing: number): void;
   zoomBy(amount: number): void;
   destroy(): void;

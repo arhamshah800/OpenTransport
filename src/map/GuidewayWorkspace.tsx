@@ -12,6 +12,7 @@ export function GuidewayWorkspace({
   mode, world, network, construction, workflow, coordinate, clickVersion, hoverCoordinate, timestampSeconds, active,
   onOverlayChange, onEconomyChange, onNetwork, onTransitOverlay, selectedLineId, onSelectLine, engine, snapshot, onSnapshot,
   phase: controlledPhase, onPhaseChange, onCommitSuccess, onViewLoans,
+  onPurchaseVehicle,
 }: {
   readonly mode: 'TRAM' | 'SUBWAY';
   readonly world: World;
@@ -36,6 +37,7 @@ export function GuidewayWorkspace({
   readonly onPhaseChange?: (phase: 'construct' | 'service') => void;
   readonly onCommitSuccess?: (estimate: { readonly riverCrossingIds: readonly string[] }) => void;
   readonly onViewLoans?: () => void;
+  readonly onPurchaseVehicle?: (lineId: string, vehicleId: string, purchaseCost: number) => boolean;
 }) {
   const [internalPhase, setInternalPhase] = useState<'construct' | 'service'>(selectedLineId ? 'service' : 'construct');
   const phase = controlledPhase ?? internalPhase;
@@ -107,6 +109,7 @@ export function GuidewayWorkspace({
             engine={engine}
             snapshot={snapshot}
             onSnapshot={onSnapshot}
+            onPurchaseVehicle={onPurchaseVehicle}
           />
         )}
     </section>

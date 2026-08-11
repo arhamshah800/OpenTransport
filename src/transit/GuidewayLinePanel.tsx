@@ -13,7 +13,7 @@ import { LineEditor } from './LineEditor';
 import { networkToOverlay } from './BusLinePanel';
 import type { SimulationEngine, SimulationSnapshot } from '../time';
 
-export function GuidewayLinePanel({ mode, world, network, construction, coordinate, clickVersion, hoverCoordinate, active, onNetwork, onOverlay, selectedLineId, onSelectLine, engine, snapshot, onSnapshot }: {
+export function GuidewayLinePanel({ mode, world, network, construction, coordinate, clickVersion, hoverCoordinate, active, onNetwork, onOverlay, selectedLineId, onSelectLine, engine, snapshot, onSnapshot, onPurchaseVehicle }: {
   readonly mode: 'TRAM' | 'SUBWAY';
   readonly world: World;
   readonly network: TransitNetwork;
@@ -29,6 +29,7 @@ export function GuidewayLinePanel({ mode, world, network, construction, coordina
   readonly engine: SimulationEngine;
   readonly snapshot: SimulationSnapshot;
   readonly onSnapshot: (snapshot: SimulationSnapshot) => void;
+  readonly onPurchaseVehicle?: (lineId: string, vehicleId: string, purchaseCost: number) => boolean;
 }) {
   const [drafting, setDrafting] = useState(false);
   const [draftStops, setDraftStops] = useState<TransitStop[]>([]);
@@ -58,7 +59,7 @@ export function GuidewayLinePanel({ mode, world, network, construction, coordina
         ...network.definition.stops.map((stop) => ({ id: stop.id, coordinate: stop.coordinate, name: stop.name })),
         ...draftStops.map((stop) => ({ id: stop.id, coordinate: stop.coordinate, name: stop.name })),
         ...(hoverPoint ? [{ id: 'draft-guideway-hover', coordinate: hoverPoint, name: 'Next stop' }] : []),
-        ...stations.map((station, index) => ({ id: station.id ?? `station-footprint-${index}`, coordinate: station.center, name: station.id ?? `Station ${index + 1}` })),
+        ...stations.map((station, index) => ({ id: station.id ?? `station-footprint-${index}`, coordinate: station.center, name: station.name ?? station.id ?? `Station ${index + 1}` })),
       ],
     });
   }, [active, construction, draftStops, drafting, hoverCoordinate, mode, network, onOverlay, selectedLineId, stations]);
@@ -84,10 +85,10 @@ export function GuidewayLinePanel({ mode, world, network, construction, coordina
       return;
     }
     setDraftStops((current) => [...current, {
-      id, name: station.id ?? `Station ${current.length + 1}`, coordinate: station.center, kind: 'station', supportedModes: ['SUBWAY'],
+      id, name: station.name ?? station.id ?? `Station ${current.length + 1}`, coordinate: station.center, kind: 'station', supportedModes: ['SUBWAY'],
       infrastructure: { constructionStationId: station.id },
     }]);
-    setMessage(`Added ${station.id}. Select connected stations to continue.`);
+    setMessage(`Added ${station.name ?? station.id}. Select connected stations to continue.`);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clickVersion]);
 
@@ -124,7 +125,7 @@ export function GuidewayLinePanel({ mode, world, network, construction, coordina
   };
 
   if (selectedLineId && network.getLine(selectedLineId)?.mode === mode) {
-    return <LineEditor world={world} network={network} lineId={selectedLineId} mode={mode} construction={construction} onNetwork={onNetwork} onClose={() => onSelectLine(null)} onMessage={setMessage} engine={engine} snapshot={snapshot} onSnapshot={onSnapshot} />;
+    return <LineEditor world={world} network={network} lineId={selectedLineId} mode={mode} construction={construction} onNetwork={onNetwork} onClose={() => onSelectLine(null)} onMessage={setMessage} engine={engine} snapshot={snapshot} onSnapshot={onSnapshot} onPurchaseVehicle={onPurchaseVehicle} />;
   }
 
   return <section className="line-workflow" aria-label={`${mode.toLowerCase()} service line builder`}>

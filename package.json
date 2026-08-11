@@ -8,6 +8,8 @@
     "build": "tsc -b && vite build",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:visual": "playwright test",
+    "test:visual:update": "playwright test --update-snapshots",
     "generate:city": "node tools/real-city/src/cli.mjs",
     "generate:dallas": "node tools/real-city/src/cli.mjs --config tools/real-city/configs/dallas.config.json",
     "download:dallas": "node tools/real-city/src/download-dallas.mjs"
@@ -22,6 +24,7 @@
     "vitest": "latest"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4"
   }

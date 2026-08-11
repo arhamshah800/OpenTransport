@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { modeRegistry } from '../modes';
 import { setLineActive, type TransitNetwork } from '../transit';
 import { lineDisplayColor } from '../transit/lineStyle';
@@ -25,6 +26,7 @@ export function LineOperationsPanel({
   snapshot,
   onSnapshot,
   onNetwork,
+  onPurchaseVehicle,
 }: {
   readonly network: TransitNetwork;
   readonly lineId: string;
@@ -32,7 +34,9 @@ export function LineOperationsPanel({
   readonly snapshot: SimulationSnapshot;
   readonly onSnapshot: (snapshot: SimulationSnapshot) => void;
   readonly onNetwork?: (network: TransitNetwork) => void;
+  readonly onPurchaseVehicle?: (vehicleId: string, purchaseCost: number) => boolean;
 }) {
+  const [fleetMessage, setFleetMessage] = useState<string>();
   const line = network.getLine(lineId);
   if (!line) return null;
 
@@ -97,6 +101,9 @@ export function LineOperationsPanel({
   const lineOperatingCost = snapshot.finances.lines.find((item) => item.lineId === line.id)?.operatingCostCents ?? 0;
   const lineWarnings = (ops?.warnings ?? []).filter((warning) => warning.includes(line.id) || warning.startsWith('Requested:'));
   const serviceRunning = configuration.active && line.active;
+  const disruption = configuration.disruption && configuration.disruption.untilSeconds > snapshot.timestampSeconds ? configuration.disruption : undefined;
+  const depotBays = Math.max(1, Math.ceil(configuration.assignedVehicleCount / 10));
+  const dailyMaintenance = configuration.assignedVehicleCount * Math.round(modeRegistry.getVehicleDefinition(configuration.vehicleTypeId).operatingCostPerHour * 2.5);
 
   const headwayOptions = (selected: number) => {
     const values = [...new Set([...HEADWAY_PRESETS.filter((value) => value >= minimum), selected, minimum])].sort((a, b) => a - b);
@@ -109,7 +116,7 @@ export function LineOperationsPanel({
       <h3>{line.name}</h3>
       <dl className="operations-summary">
         <dt>Mode</dt><dd>{mode.name}</dd>
-        <dt>Service status</dt><dd>{serviceRunning ? 'Running' : !line.active ? 'Stopped: topology inactive' : 'Stopped'}</dd>
+        <dt>Service status</dt><dd>{disruption ? `Paused: ${disruption.kind} recovery` : serviceRunning ? 'Running' : !line.active ? 'Stopped: topology inactive' : 'Stopped'}</dd>
         <dt>Current period</dt><dd>{snapshot.servicePeriod === 'daytime' ? 'Day service' : 'Night service'} · {formatHeadwayLabel(currentHeadway)}</dd>
         <dt>Assigned vehicle type</dt><dd>{vehicle.name}</dd>
         <dt>Vehicles assigned</dt><dd>{configuration.assignedVehicleCount}</dd>
@@ -119,6 +126,8 @@ export function LineOperationsPanel({
         <dt>Average wait</dt><dd>{averageWait === null ? '—' : `${averageWait}s`}</dd>
         <dt>Boardings (line)</dt><dd>{boardings}</dd>
         <dt>Operating cost</dt><dd>{money.format(operatingCostCents / 100)}/hr active · {money.format(lineOperatingCost / 100)} recorded</dd>
+        <dt>Depot capacity required</dt><dd>{depotBays} bay{depotBays === 1 ? '' : 's'} for assigned fleet</dd>
+        <dt>Est. fleet maintenance</dt><dd>{money.format(dailyMaintenance)}/day</dd>
         <dt>Fare revenue</dt><dd>{money.format(fareRevenue / 100)} recorded</dd>
       </dl>
 
@@ -131,6 +140,13 @@ export function LineOperationsPanel({
         )}
       </div>
       <p className="debug-note">Start Service enables dispatch and keeps topology active. Stop Service ends new dispatching; moving vehicles finish their current direction.</p>
+      <div className="proposal-actions" aria-label="Disruption and recovery controls">
+        {disruption ? <button type="button" className="secondary" onClick={() => update({ disruption: undefined })}>Restore service now</button> : <>
+          <button type="button" className="secondary" onClick={() => update({ disruption: { kind: 'signal', untilSeconds: snapshot.timestampSeconds + 30 * 60 } })}>Signal issue · 30 min</button>
+          <button type="button" className="secondary" onClick={() => update({ disruption: { kind: 'construction', untilSeconds: snapshot.timestampSeconds + 2 * 3600 } })}>Construction closure · 2 hr</button>
+        </>}
+      </div>
+      {disruption && <p className="operations-warning" role="status">No new vehicles dispatch until Day {Math.floor(disruption.untilSeconds / 86_400) + 1}, {String(Math.floor((disruption.untilSeconds / 3600) % 24)).padStart(2, '0')}:{String(Math.floor((disruption.untilSeconds / 60) % 60)).padStart(2, '0')}. Vehicles on the affected line are held and appear red on the map until recovery.</p>}
 
       <label>Ticket fare (USD)
         <div className="input-with-unit">
@@ -177,6 +193,8 @@ export function LineOperationsPanel({
       <label>Vehicles assigned
         <input aria-label="Vehicles assigned" type="number" min={0} max={MAX_VEHICLES} value={configuration.assignedVehicleCount} onChange={(event) => update({ assignedVehicleCount: Math.min(MAX_VEHICLES, Math.max(0, Math.round(Number(event.target.value) || 0))) })} />
       </label>
+      {onPurchaseVehicle && <button type="button" className="secondary" disabled={configuration.assignedVehicleCount >= MAX_VEHICLES} onClick={() => { if (onPurchaseVehicle(vehicle.id, vehicle.purchaseCost)) { update({ assignedVehicleCount: configuration.assignedVehicleCount + 1 }); setFleetMessage(`${vehicle.name} purchased and assigned.`); } else setFleetMessage(`Insufficient cash to purchase ${vehicle.name} for ${money.format(vehicle.purchaseCost)}.`); }}>Buy & assign {vehicle.name} · {money.format(vehicle.purchaseCost)}</button>}
+      {fleetMessage && <p className="debug-note" role="status">{fleetMessage}</p>}
 
       {fleetShortfall && (
         <p className="operations-warning" role="status">

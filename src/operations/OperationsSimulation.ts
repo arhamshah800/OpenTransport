@@ -60,6 +60,7 @@ export class OperationsSimulation {
 
   public getConfiguration(lineId: string): LineServiceConfiguration | undefined { return this.configurations.get(lineId); }
   public listConfigurations(): readonly LineServiceConfiguration[] { return [...this.configurations.values()]; }
+  private isDisrupted(configuration: LineServiceConfiguration): boolean { return Boolean(configuration.disruption && configuration.disruption.untilSeconds > this.timeSeconds); }
 
   public enqueuePassenger(id: string, originStopId: string, destinationStopId: string): boolean {
     const direct = this.network.definition.lines.find((line) => {
@@ -136,6 +137,11 @@ export class OperationsSimulation {
     for (const line of this.network.definition.lines) {
       const config = this.configurations.get(line.id);
       if (!config?.active || !line.active) continue;
+      if (this.isDisrupted(config)) {
+        const warning = `Line ${line.id} is paused for ${config.disruption!.kind} recovery.`;
+        if (!this.warnings.includes(warning)) this.warnings = [...this.warnings, warning];
+        continue;
+      }
       const headwayMinutes = hour >= config.frequency.daytimeStartHour && hour < config.frequency.nighttimeStartHour ? config.frequency.daytimeHeadwayMinutes : config.frequency.nighttimeHeadwayMinutes;
       // Idle terminus vehicles stay visible but do not consume fleet slots (simplified depot recirculation).
       const activeCount = this.vehicles.filter((vehicle) => vehicle.lineId === line.id && this.countsAgainstFleet(vehicle)).length;
@@ -176,12 +182,17 @@ export class OperationsSimulation {
 
   private canTurnback(line: TransitLine): boolean {
     const config = this.configurations.get(line.id);
-    return line.direction === 'bidirectional' && Boolean(config?.active && line.active);
+    return line.direction === 'bidirectional' && Boolean(config?.active && line.active && !this.isDisrupted(config));
   }
 
   private moveVehicles(step: number): void {
     this.vehicles = this.vehicles.map((vehicle) => {
       const line = this.network.getLine(vehicle.lineId)!;
+      const configuration = this.configurations.get(line.id);
+      if (configuration && this.isDisrupted(configuration)) {
+        return vehicle.state === 'DELAYED' ? vehicle : { ...vehicle, state: 'DELAYED', delayedFromState: vehicle.state };
+      }
+      if (vehicle.state === 'DELAYED') return { ...vehicle, state: vehicle.delayedFromState ?? 'DWELLING', delayedFromState: undefined };
       const template = modeRegistry.getVehicleDefinition(vehicle.vehicleTypeId);
       if (vehicle.state === 'DWELLING') {
         const remaining = vehicle.dwellRemainingSeconds - step;

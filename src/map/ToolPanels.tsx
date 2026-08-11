@@ -40,7 +40,12 @@ export function DataPanel({
   const boardings = operations?.statistics.boardings ?? 0;
   const unserved = population.unservedTrips;
   const served = population.servedTrips;
-  const coverage = boardings + unserved > 0 ? Math.round((boardings / (boardings + unserved)) * 100) : 0;
+  const resolved = served + unserved;
+  const coverage = resolved > 0 ? Math.round((served / resolved) * 100) : 0;
+  const statistics = operations?.statistics;
+  const averageWaitSeconds = statistics?.boardings ? Math.round(statistics.totalWaitSeconds / statistics.boardings) : 0;
+  const queuedPassengers = Object.values(operations?.queues ?? {}).reduce((total, queue) => total + queue.length, 0);
+  const activeFleet = operations?.vehicles.length ?? 0;
   return (
     <section className="layer-panel">
       <p className="eyebrow">TRANSPORT DATA</p>
@@ -52,7 +57,15 @@ export function DataPanel({
         <div><span>Unserved trips</span><strong>{unserved}</strong></div>
         <div><span>Boardings</span><strong>{boardings}</strong></div>
       </div>
-      <p className="context-intro">Approx. served share of resolved demand: <strong>{coverage}%</strong>. Avg wait {operations?.statistics.boardings ? Math.round(operations.statistics.totalWaitSeconds / operations.statistics.boardings) : 0}s.</p>
+      <p className="context-intro">Approx. served share of resolved demand: <strong>{coverage}%</strong>. Avg wait {averageWaitSeconds}s.</p>
+      <div className="planning-dashboards" aria-label="Live planning dashboards">
+        <section><p className="eyebrow">RIDERSHIP</p><strong>{boardings.toLocaleString()}</strong><span>boardings · {statistics?.alightings ?? 0} alightings</span></section>
+        <section><p className="eyebrow">COVERAGE</p><strong>{coverage}%</strong><span>{served.toLocaleString()} of {resolved.toLocaleString()} resolved trips served</span></section>
+        <section><p className="eyebrow">CONGESTION</p><strong>{statistics?.deniedBoardings ?? 0}</strong><span>denied boardings · {queuedPassengers} waiting</span></section>
+        <section><p className="eyebrow">UNSERVED DEMAND</p><strong>{unserved.toLocaleString()}</strong><span>trips without a viable journey</span></section>
+        <section><p className="eyebrow">ACCESSIBILITY</p><strong>{averageWaitSeconds}s</strong><span>average wait · {statistics?.maximumWaitSeconds ?? 0}s longest</span></section>
+        <section><p className="eyebrow">SERVICE</p><strong>{activeFleet}</strong><span>vehicles operating · {statistics?.completedTrips ?? 0} completed trips</span></section>
+      </div>
       {emptyDemandHint && <p className="debug-note" role="status">No active requests yet — resume simulation or wait for morning demand.</p>}
       <fieldset>
         <legend>Population</legend>
@@ -63,6 +76,7 @@ export function DataPanel({
         <label><input type="checkbox" checked={visibility.workplaces} onChange={(event) => setToggle('workplaces', event.target.checked)} /><span>Jobs / Employment</span></label>
         <label><input type="checkbox" checked={visibility.tripDemand} onChange={(event) => setToggle('tripDemand', event.target.checked)} /><span>Active & served demand <small>{population.activeRequests} active requests</small></span></label>
         <label><input type="checkbox" checked={visibility.unservedDemand} onChange={(event) => setToggle('unservedDemand', event.target.checked)} /><span>Unserved demand <small>{unserved} trips</small></span></label>
+        <label><input type="checkbox" checked={visibility.acquisitionCosts} onChange={(event) => setToggle('acquisitionCosts', event.target.checked)} /><span>Acquisition cost heatmap <small>Higher-cost parcels appear darker</small></span></label>
         <label><input type="checkbox" checked={visibility.buildings} onChange={(event) => setToggle('buildings', event.target.checked)} /><span>Buildings</span></label>
         <label><input type="checkbox" checked={visibility.pois} onChange={(event) => setToggle('pois', event.target.checked)} /><span>Destinations</span></label>
         <label><input type="checkbox" checked={visibility.water} onChange={(event) => setToggle('water', event.target.checked)} /><span>Water</span></label>
@@ -80,7 +94,7 @@ export function DataPanel({
 }
 
 export function SettingsPanel({ developerMode, onDeveloperModeChange }: { readonly developerMode: boolean; readonly onDeveloperModeChange: (enabled: boolean) => void }) {
-  return <section className="settings-panel"><p className="eyebrow">SETTINGS</p><h2>Game interface</h2><label className="settings-switch"><span><strong>Developer Mode</strong><small>Reveal diagnostics, manual time controls, raw IDs, and topology tools.</small></span><input type="checkbox" role="switch" checked={developerMode} onChange={(event) => onDeveloperModeChange(event.target.checked)} /></label><p className="settings-status">Developer Mode is <strong>{developerMode ? 'on' : 'off'}</strong>.</p><div className="shortcut-list"><p className="eyebrow">KEYBOARD SHORTCUTS</p><dl><dt>Escape</dt><dd>Cancel proposal, or return to Select</dd><dt>1</dt><dd>Bus</dd><dt>2</dt><dd>Tram</dd><dt>3</dt><dd>Subway</dd></dl></div></section>;
+  return <section className="settings-panel"><p className="eyebrow">SETTINGS</p><h2>Game interface</h2><label className="settings-switch"><span><strong>Developer Mode</strong><small>Reveal diagnostics, manual time controls, raw IDs, and topology tools.</small></span><input type="checkbox" role="switch" checked={developerMode} onChange={(event) => onDeveloperModeChange(event.target.checked)} /></label><p className="settings-status">Developer Mode is <strong>{developerMode ? 'on' : 'off'}</strong>.</p><div className="shortcut-list"><p className="eyebrow">KEYBOARD SHORTCUTS</p><dl><dt>⌘/Ctrl K</dt><dd>Open map search</dd><dt>S / Escape</dt><dd>Select or cancel a proposal</dd><dt>B / 1</dt><dd>Bus tool</dd><dt>T / 2</dt><dd>Tram tool</dd><dt>U / 3</dt><dd>Subway tool</dd><dt>D / 4</dt><dd>Data tool</dd><dt>M / F / I / G</dt><dd>Menu, finance, inspector, settings</dd><dt>L</dt><dd>Toggle line drawer</dd><dt>Space</dt><dd>Pause or resume simulation</dd><dt>Arrow keys</dt><dd>Pan map</dd><dt>+ / −</dt><dd>Zoom map</dd><dt>0</dt><dd>Reset regional camera</dd></dl></div></section>;
 }
 
 export function InspectorPanel({ world, selection, coordinate, network, transit, simulation, stopStats, developerMode = false, onOpenLine }: { readonly world: World; readonly selection: MapSelection; readonly coordinate: { readonly latitude: number; readonly longitude: number } | null; readonly network: TransitNetwork; readonly transit: TransitOverlay; readonly simulation: SimulationSnapshot; readonly stopStats?: import('../operations').StopPassengerStats; readonly developerMode?: boolean; readonly onOpenLine?: (lineId: string) => void }) {

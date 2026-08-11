@@ -80,6 +80,25 @@ describe('Vehicles & Operations', () => {
     expect(operations.snapshot().vehicles.length).toBeGreaterThan(0);
   });
 
+  it('halts new dispatches during a timed disruption and automatically recovers', () => {
+    const operations = new OperationsSimulation(network(), [{ ...config(3, true, 4), disruption: { kind: 'signal', untilSeconds: 300 } }]);
+    operations.advance(299);
+    expect(operations.snapshot().vehicles).toHaveLength(0);
+    expect(operations.snapshot().warnings.some((warning) => warning.includes('paused for signal'))).toBe(true);
+    operations.advance(2);
+    expect(operations.snapshot().vehicles.length).toBeGreaterThan(0);
+  });
+
+  it('holds already-dispatched vehicles in a delayed state until recovery', () => {
+    const operations = new OperationsSimulation(network(0.01), [config(1, true, 4)]);
+    operations.advance(2);
+    operations.configureLine({ ...config(1, true, 4), disruption: { kind: 'signal', untilSeconds: 20 } });
+    operations.advance(1);
+    expect(operations.snapshot().vehicles[0]?.state).toBe('DELAYED');
+    operations.advance(20);
+    expect(operations.snapshot().vehicles[0]?.state).not.toBe('DELAYED');
+  });
+
   it('applies headway and fleet size changes', () => {
     const operations = new OperationsSimulation(network(0.05), [config(1, true, 10)]);
     operations.configureLine(config(1, true, 5));

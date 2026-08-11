@@ -1,4 +1,5 @@
 import { defaultEngineeringConfiguration } from './config';
+import { scheduleConstruction } from './schedule';
 import type { ConstructionPreview } from './ConstructionWorkflow';
 
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
@@ -16,6 +17,9 @@ export function proposalGrade(preview: ConstructionPreview): number | undefined 
   return Math.abs(preview.proposal.verticalProfile.endElevationMeters - preview.proposal.verticalProfile.startElevationMeters) / preview.evaluation.estimate.horizontalLengthMeters;
 }
 
+/** Transparent, deliberately coarse planning schedule—not a hidden simulation timer. */
+export function constructionSchedule(preview: ConstructionPreview) { return scheduleConstruction(preview.proposal, preview.evaluation.estimate); }
+
 export function playerIssueMessage(code: string, grade?: number): string {
   if (code === 'EXCESSIVE_GRADE') return `Grade ${((grade ?? 0) * 100).toFixed(1)}% exceeds maximum ${(defaultEngineeringConfiguration.maxSubwayGrade * 100).toFixed(1)}%.`;
   if (code === 'INSUFFICIENT_TUNNEL_CLEARANCE') return 'Tunnel conflicts with existing tunnel. Increase or decrease depth.';
@@ -28,6 +32,7 @@ export function playerIssueMessage(code: string, grade?: number): string {
 export function ProposalCard({ preview, grade }: { readonly preview: ConstructionPreview; readonly grade?: number }) {
   const { evaluation } = preview; const cost = evaluation.estimate.cost;
   const ready = evaluation.valid && preview.affordable;
+  const schedule = constructionSchedule(preview);
   return <section className={`proposal-card ${ready ? 'valid' : 'invalid'}`} aria-live="polite">
     <header><strong>{ready ? 'Ready to build' : 'Action required'}</strong><span>{money.format(cost.total)}</span></header>
     <dl>
@@ -47,8 +52,11 @@ export function ProposalCard({ preview, grade }: { readonly preview: Constructio
       <dt>Affected buildings</dt><dd>{evaluation.estimate.demolitionImpacts.length}</dd>
       <dt>Current cash</dt><dd>{money.format(preview.cashCents / 100)}</dd>
       <dt>Cash after build</dt><dd className={preview.affordable ? '' : 'expense'}>{money.format(preview.cashAfterCents / 100)}</dd>
+      <dt>Estimated delivery</dt><dd>{schedule.weeks} weeks</dd>
     </dl>
+    <div className="construction-stages"><strong>Construction stages</strong><ol>{schedule.stages.map((stage, index) => <li key={stage.name}><span>{index + 1}</span>{stage.name} · weeks {stage.startWeek}–{stage.endWeek}</li>)}</ol><p>{schedule.disruption}</p></div>
     {evaluation.estimate.riverCrossingIds.length > 0 && <p className={`proposal-note ${cost.riverEngineering > 0 ? 'river' : ''}`}>River engineering adds {money.format(cost.riverEngineering)}. Keep both ends at least {Math.abs(defaultEngineeringConfiguration.riverMinimumElevationMeters)} m underground.</p>}
+    {evaluation.estimate.demolitionImpacts.length > 0 && <details className="affected-buildings"><summary>Affected parcels ({evaluation.estimate.demolitionImpacts.length})</summary><ul>{evaluation.estimate.demolitionImpacts.map((impact) => <li key={impact.buildingId}><span>{impact.buildingId}</span><strong>{money.format(impact.cost)}</strong></li>)}</ul></details>}
     {!preview.affordable && <p className="proposal-issue">This project is unaffordable with current cash.</p>}
     {evaluation.issues.map((issue) => <p className="proposal-issue" key={issue.code}>{playerIssueMessage(issue.code, grade)}</p>)}
   </section>;
